@@ -1,0 +1,2 @@
+{% extends "portal/base.html" %}
+{% block content %}<h1>ログイン</h1><section><form method="post">{{ csrf|safe }}{{ form_html|safe }}<input type="hidden" name="next" value="{{ next }}"><button>ログイン</button></form></section>{% endblock %}

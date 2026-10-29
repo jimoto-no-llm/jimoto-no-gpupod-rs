@@ -1,0 +1,63 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/gpupod-common",
+    "crates/gpupod-control",
+    "crates/gpupod-agent",
+    "crates/gpupod-tools",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.85"
+
+# ルート Cargo.toml は lead が管理する。メンバーはここを編集せず .workspace = true 参照を使うこと。
+[workspace.dependencies]
+gpupod-common = { path = "crates/gpupod-common" }
+gpupod-agent = { path = "crates/gpupod-agent" }
+gpupod-control = { path = "crates/gpupod-control" }
+
+# 基本
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3"
+libc = "0.2"
+base64 = "0.22"
+
+# async / ネットワーク
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync", "net", "io-util", "process", "fs", "signal"] }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["set-header"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+russh = "0.54"
+
+# 永続化 / OS
+rusqlite = { version = "0.41", features = ["bundled"] }
+fs4 = "1"
+sysinfo = "0.36"
+bollard = { version = "0.21", default-features = false, features = ["pipe"] }
+
+# CLI / テンプレート / 認証 / 圧縮
+clap = { version = "4", features = ["derive"] }
+askama = "0.12"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+flate2 = "1"
+tar = "0.4"
+bzip2 = "0.5"
+
+[profile.release]
+opt-level = 2

@@ -1,0 +1,15 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<h1>GPUを借りる</h1><p>テンプレートとSSH公開鍵を指定して開始します。作業データは返却時に削除されます。<a href="">状態を更新</a></p>
+{% for offer in offers %}<section><h2>{{ offer.gpu_name }}</h2><p>{{ offer.node_name }} · {{ offer.gpu_vendor }}{% if offer.gpu_memory_mib > 0 %} · {{ offer.gpu_memory_mib }} MiB{% endif %} · <span class="badge">{% if offer.available %}貸出可能{% else %}{% if !offer.node_online %}オフライン{% else %}{% if offer.gpu_allocated %}利用中{% else %}{% if !offer.capacity_available %}予約可能な資源なし{% else %}受付停止 / 利用できるテンプレートなし{% endif %}{% endif %}{% endif %}{% endif %}</span></p>
+{% let benchmarks = offer.benchmarks.clone() %}{% include "portal/benchmarks.html" %}
+{% let resources = offer.resources.clone() %}{% include "portal/resources.html" %}
+{% if offer.available %}<form action="/leases/start/" method="post">{{ csrf|safe }}
+<input type="hidden" name="node" value="{{ offer.node_pk }}"><input type="hidden" name="gpu" value="{{ offer.gpu_id }}">
+<label>テンプレート</label><select name="template" aria-label="テンプレート">{% for item in offer.templates %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select>
+{% if offer.has_resources %}<label for="ram-{{ loop.index }}">RAM予約量 (GiB)</label><input type="number" id="ram-{{ loop.index }}" name="memory_gib" min="0.0625" step="0.0009765625" max="{{ offer.resources.available_memory_raw }}" value="{{ offer.resources.default_memory_raw }}" required>
+<label for="disk-{{ loop.index }}">ディスク予約量 (GiB)</label><input type="number" id="disk-{{ loop.index }}" name="disk_gib" min="0.015625" step="0.0009765625" max="{{ offer.resources.available_disk_raw }}" value="{{ offer.resources.default_disk_raw }}" required>{% endif %}
+<label>接続方式</label><select name="connection_mode" aria-label="接続方式"><option value="relay">中央中継</option>{% if offer.direct_host %}<option value="direct">直接接続（中央を経由しない）</option>{% endif %}</select>
+<label for="key-{{ loop.index }}">SSH公開鍵</label><textarea id="key-{{ loop.index }}" name="ssh_public_key" required placeholder="ssh-ed25519 AAAA…"></textarea><button>このGPUを借りる</button></form>{% endif %}</section>{% else %}<section>提供PCはまだ登録されていません。</section>{% endfor %}
+<h2>自分の貸出</h2><div class="scroll"><table><thead><tr><th>提供PC</th><th>テンプレート</th><th>状態</th><th></th></tr></thead><tbody>{% for lease in leases %}<tr><td>{{ lease.node_name }}</td><td>{{ lease.template_name }}</td><td>{{ lease.status }}</td><td><a href="/leases/{{ lease.pk }}/">接続・返却</a></td></tr>{% else %}<tr><td colspan="4">貸出はありません。</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

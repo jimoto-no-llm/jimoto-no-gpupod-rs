@@ -1,0 +1,4 @@
+{% if benchmarks.present %}<details><summary>実測性能</summary>
+{% match benchmarks.disk %}{% when Some(disk) %}<p>ディスク連続読込 {{ disk.read_mib_s }} MiB/s · 書込 {{ disk.write_mib_s }} MiB/s<br><small>測定日時 {{ disk.measured_at }} · {{ disk.size_mib }} MiB 測定 · 1 MiB / QD1 / direct I/O{% if disk.stale %} · 7日以上前の測定{% endif %}</small></p>{% else %}{% endmatch %}
+{% match benchmarks.network %}{% when Some(network) %}<p>中央サーバーとの通信: 下り {{ network.download_mbps }} Mbps · 上り {{ network.upload_mbps }} Mbps<br><small>測定日時 {{ network.measured_at }} · 上下各 {{ network.size_mib }} MiB{% if network.stale %} · 7日以上前の測定{% endif %}</small></p>{% else %}{% endmatch %}
+<p class="muted">提供PCからの申告値です。測定時の負荷や経路で変動します。</p></details>{% else %}<p class="muted">実測性能: 未測定</p>{% endif %}

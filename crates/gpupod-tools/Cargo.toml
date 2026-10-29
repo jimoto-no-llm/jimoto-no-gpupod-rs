@@ -1,0 +1,47 @@
+[package]
+name = "gpupod-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# gpupod-control / gpupod-agent の lib 実装が揃ったときに有効化する（README 参照）。
+full-stack = ["dep:gpupod-agent", "dep:gpupod-control"]
+
+[dependencies]
+gpupod-common.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+sha2.workspace = true
+hex.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rand.workspace = true
+clap.workspace = true
+# demo のみ。lib 実装が揃った gpupod-agent / gpupod-control を同一プロセスで起動する。
+gpupod-agent = { path = "../gpupod-agent", optional = true }
+gpupod-control = { path = "../gpupod-control", optional = true }
+tokio.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+fs4.workspace = true
+libc.workspace = true
+base64.workspace = true
+tempfile.workspace = true
+bollard.workspace = true
+flate2.workspace = true
+tar.workspace = true
+bzip2.workspace = true
+# ルート未登録。support_bundle の Python 正規表現（lookbehind）移植にだけ使う。
+fancy-regex = "0.14"
+futures-util = "0.3"
+# ルートの rand_core のみ。TUF 風署名のため PKCS#8 DER 変換を追加で有効化する。
+ed25519-dalek = { workspace = true, features = ["pkcs8"] }
+
+[[bin]]
+name = "gpupod-tools"
+path = "src/main.rs"

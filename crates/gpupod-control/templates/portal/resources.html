@@ -1,0 +1,4 @@
+{% if resources.error %}<p class="muted">資源の予約状況を確認中です。同期が完了するまで新規貸出を停止しています。</p>
+{% else %}{% if resources.present %}<p>提供枠: RAM {{ resources.memory_gib }} GiB · ディスク {{ resources.disk_gib }} GiB<br>
+予約済み: RAM {{ resources.allocated_memory_gib }} GiB · ディスク {{ resources.allocated_disk_gib }} GiB<br>
+新規割当可能: RAM {{ resources.available_memory_gib }} GiB · ディスク {{ resources.available_disk_gib }} GiB</p>{% endif %}{% endif %}

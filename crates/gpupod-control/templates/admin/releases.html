@@ -1,0 +1,12 @@
+{% extends "portal/base.html" %}
+{% block title %}更新の配布設定 - Jimoto GPU Pod{% endblock %}
+{% block content %}<h1>更新の配布設定</h1>{% if !error.is_empty() %}<p class="message error">{{ error }}</p>{% endif %}
+<div class="scroll"><table><tr><th>連番</th><th>バージョン</th><th>対象</th><th>チャネル</th><th>配布率</th><th>有効</th></tr>{% for item in releases %}<tr><td>{{ item.sequence }}</td><td>{{ item.version }}</td><td>{{ item.target }}</td><td>{{ item.channel }}</td><td>{{ item.rollout_percent }}%</td><td>{% if item.enabled %}有効{% else %}無効{% endif %}</td></tr>{% endfor %}</table></div>
+<section><h2>追加・更新</h2><form method="post" action="/admin/portal/agentrelease/save/">{{ csrf|safe }}
+<label for="sequence">連番（識別子）</label><input id="sequence" name="sequence" required value="{{ form.sequence }}">
+<label for="version">バージョン</label><input id="version" name="version" required maxlength="64" value="{{ form.version }}">
+<label for="target">TUF ターゲット</label><input id="target" name="target" required maxlength="200" placeholder="provider/gpupod-agent-0.1.0.tar.gz" value="{{ form.target }}">
+<label for="channel">チャネル</label><select id="channel" name="channel"><option value="stable"{% if form.channel == "stable" %} selected{% endif %}>Stable</option><option value="candidate"{% if form.channel == "candidate" %} selected{% endif %}>Candidate</option></select>
+<label for="rollout_percent">配布率（0〜100）</label><input id="rollout_percent" name="rollout_percent" required value="{{ form.rollout_percent }}">
+<p><label><input type="checkbox" name="enabled" value="1"{% if form.enabled %} checked{% endif %}> 有効</label></p>
+<button>保存</button></form></section>{% endblock %}

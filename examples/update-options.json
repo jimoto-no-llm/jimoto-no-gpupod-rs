@@ -1,0 +1,8 @@
+{
+  "repository_url": "https://gpu.example.org/updates",
+  "trusted_root": "/opt/gpupod/trusted-root.json",
+  "install_root": "/opt/gpupod",
+  "provider_state": "/var/lib/gpupod",
+  "service": "gpupod-provider.service",
+  "health_timeout": 60
+}

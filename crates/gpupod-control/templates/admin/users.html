@@ -1,0 +1,11 @@
+{% extends "portal/base.html" %}
+{% block title %}利用者アカウント - Jimoto GPU Pod{% endblock %}
+{% block content %}<h1>利用者アカウント</h1>{% if !error.is_empty() %}<p class="message error">{{ error }}</p>{% endif %}
+<section><h2>アカウント一覧</h2><div class="scroll"><table><tr><th>ユーザー名</th><th>権限</th><th>スタッフ</th><th>有効</th><th>作成日時</th></tr>{% for item in users %}<tr><td>{{ item.username }}</td><td>{% if item.is_superuser %}管理者{% else %}利用者{% endif %}</td><td>{% if item.is_staff %}あり{% else %}なし{% endif %}</td><td>{% if item.is_active %}有効{% else %}無効{% endif %}</td><td>{{ item.date_joined }}</td></tr>{% endfor %}</table></div></section>
+<section><h2>新しいアカウント</h2><form method="post" action="/admin/auth/user/create/">{{ csrf|safe }}
+<label for="username">ユーザー名</label><input id="username" name="username" required maxlength="150">
+<label for="password">パスワード</label><input id="password" name="password" type="password" required>
+<p><label><input type="checkbox" name="is_staff" value="1"> スタッフ（提供PC管理・管理設定）</label></p>
+<p><label><input type="checkbox" name="is_superuser" value="1"> 管理者</label></p>
+<p><label><input type="checkbox" name="is_active" value="1" checked> 有効</label></p>
+<button>作成</button></form></section>{% endblock %}

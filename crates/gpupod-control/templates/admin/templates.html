@@ -1,0 +1,5 @@
+{% extends "portal/base.html" %}
+{% block title %}テンプレート - Jimoto GPU Pod{% endblock %}
+{% block content %}<h1>承認済みテンプレート</h1><p>有効なテンプレートだけが利用者の選択肢に現れます。カタログの追加は <code>sync-templates</code> で行います。</p>
+<div class="scroll"><table><tr><th>ID</th><th>名前</th><th>状態</th><th></th></tr>{% for item in templates %}<tr><td>{{ item.id }}</td><td>{{ item.name }}</td><td>{% if item.enabled %}有効{% else %}無効{% endif %}</td><td><form class="inline" method="post" action="/admin/portal/workloadtemplate/{{ item.id }}/toggle/">{{ csrf|safe }}<button class="secondary">{% if item.enabled %}無効にする{% else %}有効にする{% endif %}</button></form></td></tr>{% endfor %}</table></div>
+<p><a href="/nodes/">提供PC管理に戻る</a></p>{% endblock %}

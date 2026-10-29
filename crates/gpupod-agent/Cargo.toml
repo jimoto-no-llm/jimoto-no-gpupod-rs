@@ -1,0 +1,32 @@
+[package]
+name = "gpupod-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gpupod-common.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rand.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+russh.workspace = true
+rusqlite.workspace = true
+fs4.workspace = true
+sysinfo.workspace = true
+bollard.workspace = true
+futures-util = "0.3"
+clap.workspace = true
+libc.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

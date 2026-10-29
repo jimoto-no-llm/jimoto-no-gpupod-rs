@@ -1,0 +1,5 @@
+{% extends "portal/base.html" %}
+{% block title %}管理設定 - Jimoto GPU Pod{% endblock %}
+{% block content %}<h1>管理設定</h1><p>簡易管理画面です。Django admin とは別の実装で、主要な設定だけを扱います。</p>
+<section><h2>管理対象</h2><p><a href="/admin/auth/user/">利用者アカウント</a> · <a href="/admin/portal/workloadtemplate/">テンプレート</a> · <a href="/admin/portal/agentrelease/">更新の配布設定</a></p></section>
+<p><a href="/nodes/">提供PC管理に戻る</a></p>{% endblock %}

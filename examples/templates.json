@@ -1,0 +1,95 @@
+[
+  {
+    "command": [],
+    "ports": [
+      "22/tcp",
+      "8888/tcp",
+      "6006/tcp",
+      "8080/tcp"
+    ],
+    "id": "ubuntu-24.04",
+    "image": "gpupod/ubuntu:24.04",
+    "vendors": [
+      "nvidia",
+      "amd",
+      "intel",
+      "other"
+    ]
+  },
+  {
+    "command": [],
+    "ports": [
+      "22/tcp",
+      "8888/tcp",
+      "6006/tcp",
+      "8080/tcp"
+    ],
+    "id": "ubuntu-26.04",
+    "image": "gpupod/ubuntu:26.04",
+    "vendors": [
+      "nvidia",
+      "amd",
+      "intel",
+      "other"
+    ]
+  },
+  {
+    "command": [],
+    "ports": [
+      "22/tcp",
+      "8888/tcp",
+      "6006/tcp",
+      "8080/tcp"
+    ],
+    "id": "pytorch-cpu",
+    "image": "gpupod/pytorch:2.14.1-cpu",
+    "vendors": [
+      "nvidia",
+      "amd",
+      "intel",
+      "other"
+    ]
+  },
+  {
+    "command": [],
+    "ports": [
+      "22/tcp",
+      "8888/tcp",
+      "6006/tcp",
+      "8080/tcp"
+    ],
+    "id": "pytorch-cuda",
+    "image": "gpupod/pytorch:2.14.1-cuda",
+    "vendors": [
+      "nvidia"
+    ]
+  },
+  {
+    "command": [],
+    "ports": [
+      "22/tcp",
+      "8888/tcp",
+      "6006/tcp",
+      "8080/tcp"
+    ],
+    "id": "pytorch-rocm",
+    "image": "gpupod/pytorch:2.14.1-rocm",
+    "vendors": [
+      "amd"
+    ]
+  },
+  {
+    "command": [],
+    "ports": [
+      "22/tcp",
+      "8888/tcp",
+      "6006/tcp",
+      "8080/tcp"
+    ],
+    "id": "pytorch-xpu",
+    "image": "gpupod/pytorch:2.14.1-xpu",
+    "vendors": [
+      "intel"
+    ]
+  }
+]

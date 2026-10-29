@@ -1,0 +1,4 @@
+{
+  "direct_host": "gpu-provider.example.org",
+  "direct_bind": "0.0.0.0"
+}

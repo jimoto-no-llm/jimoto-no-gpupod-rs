@@ -1,0 +1,9 @@
+{
+  "limits": {
+    "nano_cpus": 2000000000,
+    "pids_limit": 512,
+    "shm_size": 1073741824
+  },
+  "disk_path": "/var/lib/docker",
+  "min_disk_free_bytes": 10737418240
+}

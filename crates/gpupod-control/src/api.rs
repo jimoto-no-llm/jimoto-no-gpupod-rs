@@ -1,0 +1,255 @@
+//! 提供PC向け API（portal/views.py の node_* と portal/benchmarks.py）。
+//!
+//! これらの経路は CSRF 検証の対象外（Django の csrf_exempt 相当）。
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use axum::body::Bytes;
+use axum::extract::{Path, Query, Request, State};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::Response;
+use serde_json::Value;
+
+use crate::benchmarks::{self, MAX_NETWORK_BYTES, MIB};
+use crate::jsonfmt::django_json;
+use crate::models;
+use crate::services::{self, ServiceError};
+
+/// 同期 API のボディ上限（スナップショット + 結果）。
+const SYNC_BODY_LIMIT: usize = 32 * 1024 * 1024;
+/// 測定アップロードの上限（64 MiB）。
+const UPLOAD_LIMIT: u64 = 64 * MIB;
+/// アップロードの読取期限（Python 版の deadline と同じ 60 秒）。
+const UPLOAD_DEADLINE: Duration = Duration::from_secs(60);
+
+fn json_response(status: StatusCode, value: &Value, no_store: bool) -> Response {
+    let mut response = Response::new(axum::body::Body::from(django_json(value)));
+    *response.status_mut() = status;
+    response.headers_mut().insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    if no_store {
+        response.headers_mut().insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    }
+    response
+}
+
+fn error_response(status: StatusCode, message: &str) -> Response {
+    json_response(status, &serde_json::json!({"error": message}), true)
+}
+
+/// Bearer トークンを取り出す。
+fn bearer(headers: &HeaderMap) -> String {
+    let raw = headers.get(header::AUTHORIZATION).and_then(|value| value.to_str().ok()).unwrap_or("");
+    raw.strip_prefix("Bearer ").map(str::to_owned).unwrap_or_default()
+}
+
+/// POST /api/nodes/<id>/sync/ （node_sync）
+pub async fn node_sync(
+    State(app): State<Arc<crate::App>>,
+    Path(node_id): Path<String>,
+    request: Request,
+) -> Response {
+    let Some(node_hex) = models::uuid_to_hex(&node_id) else {
+        return error_response(StatusCode::FORBIDDEN, "Invalid node credentials");
+    };
+    let token = bearer(request.headers());
+    let node = {
+        let conn = app.db.lock();
+        match services::authenticate_node(&conn, &node_hex, &token, true) {
+            Some(node) => node,
+            None => return error_response(StatusCode::FORBIDDEN, "Invalid node credentials"),
+        }
+    };
+
+    let body = match axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT).await {
+        Ok(body) => body,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid payload"),
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid payload"),
+    };
+    match services::sync_node(&app.db, &node, &payload) {
+        Ok(result) => json_response(
+            StatusCode::OK,
+            &serde_json::to_value(&result).unwrap_or(Value::Null),
+            true,
+        ),
+        Err(ServiceError::Agent(message)) => error_response(StatusCode::BAD_REQUEST, &message),
+        Err(ServiceError::Payload) => error_response(StatusCode::BAD_REQUEST, "Invalid payload"),
+        Err(ServiceError::Generic) => error_response(StatusCode::BAD_REQUEST, "Invalid payload"),
+        Err(ServiceError::Db(message)) => {
+            tracing::error!("sync failed: {message}");
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, "Invalid payload")
+        }
+    }
+}
+
+/// POST /api/nodes/<id>/token/prepare/ （node_token_prepare）
+pub async fn node_token_prepare(
+    State(app): State<Arc<crate::App>>,
+    Path(node_id): Path<String>,
+    request: Request,
+) -> Response {
+    let Some(node_hex) = models::uuid_to_hex(&node_id) else {
+        return error_response(StatusCode::FORBIDDEN, "Invalid node credential");
+    };
+    let token = bearer(request.headers());
+    let node = {
+        let conn = app.db.lock();
+        match services::authenticate_node(&conn, &node_hex, &token, false) {
+            Some(node) => node,
+            None => return error_response(StatusCode::FORBIDDEN, "Invalid node credential"),
+        }
+    };
+    let body = match axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT).await {
+        Ok(body) => body,
+        Err(_) => return error_response(StatusCode::CONFLICT, "Credential rotation was not accepted"),
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(_) => return error_response(StatusCode::CONFLICT, "Credential rotation was not accepted"),
+    };
+    let rotation = payload.get("id").and_then(|value| value.as_str()).unwrap_or("");
+    let replacement = payload.get("token").and_then(|value| value.as_str()).unwrap_or("");
+    let conn = app.db.lock();
+    match services::prepare_rotation(&conn, &node, rotation, replacement) {
+        Ok(result) => json_response(StatusCode::OK, &result, true),
+        Err(_) => error_response(StatusCode::CONFLICT, "Credential rotation was not accepted"),
+    }
+}
+
+/// POST /api/nodes/<id>/token/commit/ （node_token_commit）
+pub async fn node_token_commit(
+    State(app): State<Arc<crate::App>>,
+    Path(node_id): Path<String>,
+    request: Request,
+) -> Response {
+    let node_hex = match models::uuid_to_hex(&node_id) {
+        Some(hex) => hex,
+        None => return error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+    };
+    let token = bearer(request.headers());
+    let body = match axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT).await {
+        Ok(body) => body,
+        Err(_) => return error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+    };
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(_) => return error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+    };
+    let rotation = payload.get("id").and_then(|value| value.as_str()).unwrap_or("");
+    let conn = app.db.lock();
+    match services::commit_rotation(&conn, &node_hex, rotation, &token) {
+        Ok(result) => json_response(StatusCode::OK, &result, true),
+        Err(_) => error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+    }
+}
+
+/// GET/POST /api/nodes/<id>/benchmark/ （node_benchmark）
+pub async fn node_benchmark(
+    State(app): State<Arc<crate::App>>,
+    Path(node_id): Path<String>,
+    query: Query<std::collections::HashMap<String, String>>,
+    request: Request,
+) -> Response {
+    let download = request.method() == axum::http::Method::GET;
+    let Some(node_hex) = models::uuid_to_hex(&node_id) else {
+        return error_response(StatusCode::FORBIDDEN, "Invalid node credentials");
+    };
+    let token = bearer(request.headers());
+    let node = {
+        let conn = app.db.lock();
+        match services::authenticate_node(&conn, &node_hex, &token, true) {
+            Some(node) => node,
+            None => return error_response(StatusCode::FORBIDDEN, "Invalid node credentials"),
+        }
+    };
+
+    let raw_size = if download {
+        query.get("size").cloned().unwrap_or_default()
+    } else {
+        request
+            .headers()
+            .get(header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string()
+    };
+    let size: u64 = match raw_size.parse() {
+        Ok(value) if (MIB..=MAX_NETWORK_BYTES).contains(&value) => value,
+        _ => {
+            return error_response(StatusCode::BAD_REQUEST, "Sample must have a length between 1 and 64 MiB")
+        }
+    };
+
+    if !download {
+        let content_type = request
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        if !content_type.starts_with("application/octet-stream") || request.headers().contains_key("content-encoding") {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Upload must be uncompressed application/octet-stream",
+            );
+        }
+    }
+
+    let claimed = {
+        let conn = app.db.lock();
+        benchmarks::claim(&conn, &node.id, if download { "download" } else { "upload" })
+    };
+    if claimed != Ok(true) {
+        let mut response =
+            error_response(StatusCode::TOO_MANY_REQUESTS, "Measurement cooldown");
+        response
+            .headers_mut()
+            .insert(header::RETRY_AFTER, crate::config::BENCHMARK_COOLDOWN_SECONDS.to_string().parse().unwrap());
+        return response;
+    }
+
+    if download {
+        let block: Bytes = {
+            use rand::RngCore;
+            let mut buffer = vec![0u8; 65536];
+            rand::thread_rng().fill_bytes(&mut buffer);
+            Bytes::from(buffer)
+        };
+        let mut payload = Vec::with_capacity(size as usize);
+        while (payload.len() as u64) < size {
+            let remaining = (size - payload.len() as u64) as usize;
+            let take = remaining.min(block.len());
+            payload.extend_from_slice(&block[..take]);
+        }
+        let mut response = Response::new(axum::body::Body::from(payload));
+        *response.status_mut() = StatusCode::OK;
+        response.headers_mut().insert(header::CONTENT_TYPE, "application/octet-stream".parse().unwrap());
+        response.headers_mut().insert(header::CONTENT_LENGTH, size.to_string().parse().unwrap());
+        response.headers_mut().insert("x-accel-buffering", "no".parse().unwrap());
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, "no-store, no-transform".parse().unwrap());
+        return response;
+    }
+
+    // アップロード: Python 版と同じく size バイトだけ読み切ることを確認する。
+    let body = request.into_body();
+    let bytes = match tokio::time::timeout(UPLOAD_DEADLINE, axum::body::to_bytes(body, size as usize)).await {
+        Ok(Ok(bytes)) => bytes,
+        _ => return error_response(StatusCode::BAD_REQUEST, "Incomplete or timed-out sample"),
+    };
+    if bytes.len() as u64 != size {
+        return error_response(StatusCode::BAD_REQUEST, "Incomplete or timed-out sample");
+    }
+    let mut response = json_response(
+        StatusCode::OK,
+        &serde_json::json!({"received_bytes": bytes.len()}),
+        false,
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "no-store, no-transform".parse().unwrap());
+    response
+}
