@@ -351,7 +351,7 @@ pub async fn node_benchmark(
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// レート制限の窓（1 秒）。
 const PUBLIC_RATE_WINDOW: Duration = Duration::from_secs(1);
