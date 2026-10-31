@@ -623,6 +623,7 @@ pub fn router(app: Arc<crate::App>) -> Router {
             post(crate::pages::node_control),
         )
         .route("/api/nodes/{node_id}/sync/", post(crate::api::node_sync))
+        .route("/api/public/inventory", get(crate::api::public_inventory))
         .route(
             "/api/nodes/{node_id}/benchmark/",
             get(crate::api::node_benchmark).post(crate::api::node_benchmark),
@@ -635,6 +636,8 @@ pub fn router(app: Arc<crate::App>) -> Router {
             "/api/nodes/{node_id}/token/commit/",
             post(crate::api::node_token_commit),
         )
+        // 公開在庫 API（認証不要・CSRF 不要・node.enabled のものだけ）。
+        .route("/api/public/inventory", get(crate::api::public_inventory))
         .route("/admin/", get(admin::index))
         .route("/admin/auth/user/", get(admin::users))
         .route("/admin/auth/user/create/", post(admin::user_create))

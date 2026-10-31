@@ -340,3 +340,136 @@ pub async fn node_benchmark(
     );
     response
 }
+
+// ---------------------------------------------------------------------------
+// 公開在庫 API（GET /api/public/inventory）
+//
+// 認証・CSRF の対象外。IP ベースの簡易レート制限（1 秒あたり 10 リクエスト、
+// メモリ内・単一プロセス前提）をかけ、レスポンスは公開してよい情報だけを
+// 明示的に組み立てる（IP・ノード ID・トークン・テナント情報は載せない）。
+// ---------------------------------------------------------------------------
+
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
+
+/// レート制限の窓（1 秒）。
+const PUBLIC_RATE_WINDOW: Duration = Duration::from_secs(1);
+/// 窓あたりの許可数（10 リクエスト/IP/秒）。
+const PUBLIC_RATE_MAX: u32 = 10;
+/// 期限切れの鍵を掃くしきい値（これだけ溜まったら一斉に掃く）。
+const PUBLIC_RATE_PRUNE_KEYS: usize = 4096;
+/// 上限到達時に案内する再試行までの秒数。
+const PUBLIC_RATE_RETRY_AFTER: &str = "1";
+
+/// 鍵ごとに直近リクエスト時刻を覚えるスライディングウィンドウ。
+pub struct RateLimiter {
+    window: Duration,
+    max: u32,
+    hits: Mutex<HashMap<String, Vec<Instant>>>,
+}
+
+impl RateLimiter {
+    pub fn new(window: Duration, max: u32) -> Self {
+        RateLimiter {
+            window,
+            max,
+            hits: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// この鍵のリクエストを通すか。通すときは時刻を記録する。
+    pub fn allow(&self, key: &str) -> bool {
+        let now = Instant::now();
+        let mut map = self.hits.lock().expect("rate limiter poisoned");
+        // キー数がしきい値を越えたときだけ期限切れの鍵を掃く（正常系は O(1)）。
+        if map.len() > PUBLIC_RATE_PRUNE_KEYS {
+            map.retain(|_, times| {
+                times
+                    .last()
+                    .is_some_and(|last| now.duration_since(*last) < self.window)
+            });
+        }
+        let times = map.entry(key.to_owned()).or_default();
+        times.retain(|t| now.duration_since(*t) < self.window);
+        if times.len() >= self.max as usize {
+            return false;
+        }
+        times.push(now);
+        true
+    }
+}
+
+/// 公開在庫のレート制限（プロセス内で共有）。
+static PUBLIC_INVENTORY_RATE: LazyLock<RateLimiter> =
+    LazyLock::new(|| RateLimiter::new(PUBLIC_RATE_WINDOW, PUBLIC_RATE_MAX));
+
+/// レート制限の鍵（クライアント IP）。
+///
+/// リバースプロキシの後ろの運用を前提に、プロキシが付与する
+/// X-Forwarded-For（先頭）・X-Real-IP を鍵に使う。どちらも無い接続
+/// （直アクセス・テスト）は共有の "local" 鍵にまとめる。
+fn client_ip(headers: &HeaderMap) -> String {
+    headers
+        .get(header::HeaderName::from_static("x-forwarded-for"))
+        .and_then(|value| value.to_str().ok())
+        .and_then(|list| list.split(',').next())
+        .map(|ip| ip.trim().to_owned())
+        .filter(|ip| !ip.is_empty())
+        .or_else(|| {
+            headers
+                .get(header::HeaderName::from_static("x-real-ip"))
+                .and_then(|value| value.to_str().ok())
+                .map(|ip| ip.trim().to_owned())
+                .filter(|ip| !ip.is_empty())
+        })
+        .unwrap_or_else(|| "local".to_owned())
+}
+
+/// 上限に達したときの 429 応答。
+fn rate_limited_response() -> Response {
+    let mut response = error_response(StatusCode::TOO_MANY_REQUESTS, "Too many requests");
+    response.headers_mut().insert(
+        header::RETRY_AFTER,
+        PUBLIC_RATE_RETRY_AFTER.parse().unwrap(),
+    );
+    response
+}
+
+/// GET /api/public/inventory （認証不要・CSRF 不要・公開情報だけ）。
+pub async fn public_inventory(State(app): State<Arc<crate::App>>, headers: HeaderMap) -> Response {
+    if !PUBLIC_INVENTORY_RATE.allow(&client_ip(&headers)) {
+        return rate_limited_response();
+    }
+    // DB の読み取りはブロッキングのためワーカースレッドを占有しない場所へ。
+    let (stats, gpus): (crate::site::InventoryStats, Vec<crate::site::PublicGpu>) =
+        tokio::task::spawn_blocking({
+            let app = app.clone();
+            move || crate::site::collect_inventory(&app)
+        })
+        .await
+        .unwrap_or_else(|exc| {
+            tracing::warn!("inventory aggregation failed: {exc}");
+            (Default::default(), Vec::new())
+        });
+    let body = serde_json::json!({
+        "providers": stats.providers,
+        "offered_gpus": stats.offered_gpus,
+        "available_gpus": stats.available_gpus,
+        "gpus": gpus.iter()
+            .map(|gpu| serde_json::json!({
+                "name": gpu.name,
+                "vendor": gpu.vendor_label,
+                "vram": gpu.vram,
+                "provider": gpu.provider,
+                "status": gpu.status,
+                "available": gpu.available,
+            }))
+            .collect::<Vec<_>>(),
+    });
+    let mut response = json_response(StatusCode::OK, &body, false);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "public, max-age=5".parse().unwrap());
+    response
+}

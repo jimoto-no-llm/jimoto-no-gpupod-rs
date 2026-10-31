@@ -111,7 +111,7 @@ impl SiteContext {
 // ---------------------------------------------------------------------------
 
 /// ヒーロー下の在庫ストリップ。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct InventoryStats {
     /// 提供中（enabled な提供PCが載せている）GPU 数。
     pub offered_gpus: usize,
@@ -122,7 +122,7 @@ pub struct InventoryStats {
 }
 
 /// 公開用の GPU 1 件。IP アドレス・ノード ID・内部パスは含めない。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct PublicGpu {
     pub name: String,
     pub vendor_label: String,
@@ -134,7 +134,7 @@ pub struct PublicGpu {
 }
 
 /// DB のスナップショットから在庫を集計する。壊れたデータは黙って読み飛ばす。
-fn collect_inventory(app: &crate::App) -> (InventoryStats, Vec<PublicGpu>) {
+pub fn collect_inventory(app: &crate::App) -> (InventoryStats, Vec<PublicGpu>) {
     let now_text = fmt_dt(now());
     let conn = app.db.lock();
     let nodes = models::list_nodes(&conn).unwrap_or_default();
