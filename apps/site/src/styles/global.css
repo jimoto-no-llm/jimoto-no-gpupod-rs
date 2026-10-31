@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #fafafa;
+  --color-surface: #ffffff;
+  --color-raised: #f4f4f5;
+  --color-line: #e4e4e7;
+  --color-line-2: #d4d4d8;
+  --color-ink: #171717;
+  --color-ink-2: #525252;
+  --color-ink-3: #737373;
+  --color-ok: #1f6b3a;
+  --color-ok-soft: #e7f1eb;
+  --color-busy: #8a5a00;
+  --color-off: #9a9a9a;
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

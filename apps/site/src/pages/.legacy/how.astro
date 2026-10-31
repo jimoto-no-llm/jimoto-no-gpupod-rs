@@ -1,0 +1,171 @@
+---
+// Rust 版 templates/site/how.html を移植。内容は同一。
+import Layout from "../layouts/Layout.astro";
+
+const title = '使い方 — Jimoto GPU Pod';
+const description = 'Jimoto GPU Pod の使い方。Discord サーバーへの参加、Discord ログイン、GPU を借りて SSH で接続、返却までの流れを説明します。';
+const inviteUrl = import.meta.env.GPUPOD_DISCORD_INVITE_URL ?? "";
+const guildId = import.meta.env.GPUPOD_DISCORD_GUILD_ID ?? "1551195569429422202";
+const githubUrl = "https://github.com/jimoto-no-llm/jimoto-no-gpupod";
+const updated = "2026年10月31日";
+---
+
+<Layout title={title} description={description} nav="how">
+<section class="page-hero">
+  <div class="container page-hero-inner">
+    <h1 class="page-title">使い方</h1>
+    <p class="page-lead">借りる人・提供する人、どちらも最初は Discord サーバーへの参加から始まります。参加は無料で、どなたでも可能です。</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <h2>Discord サーバーに参加する</h2>
+      <p class="section-lead">Jimoto GPU Pod は Discord サーバー（ID: {guildId}）のメンバーだけが利用できます。</p>
+    </div>
+    <ol class="join-list join-list-wide">
+      <li>招待リンクから Discord サーバーに参加する（参加は無料です）</li>
+      <li>このサイトに戻り「Discord でログイン」を選ぶ</li>
+      <li>利用パネルでGPUを選んで借りる、または提供PCを登録する</li>
+    </ol>
+    <div class="notice-actions">
+      {inviteUrl ? (
+        <>
+
+      <a class="btn btn-primary" href="{inviteUrl}" target="_blank" rel="noopener noreferrer">Discord サーバーに参加する</a>
+      
+        </>
+      ) : (
+        <>
+
+      <p class="notice-missing">招待リンクが未設定です。運営に招待リンクを確認してください。</p>
+      
+        </>
+      )}
+    </div>
+  </div>
+</section>
+
+<section class="section section-tinted">
+  <div class="container">
+    <div class="section-head">
+      <h2>GPU を借りる</h2>
+    </div>
+    <ol class="steps">
+      <li class="step">
+        <span class="step-no" aria-hidden="true">1</span>
+        <h3>ログインする</h3>
+        <p>「Discord でログイン」からアカウントを連携します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">2</span>
+        <h3>GPU とテンプレートを選ぶ</h3>
+        <p>利用パネルの一覧から、いま借りられるGPUを選び、承認済みテンプレートと資源の予約量を指定します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">3</span>
+        <h3>SSH で接続する</h3>
+        <p>貸出画面に表示された接続先とポートへ SSH します。接続には利用者本人の SSH 公開鍵を使います。</p>
+      </li>
+    </ol>
+    <div class="code-card">
+      <div class="code-card-head"><span class="code-card-title">接続の例</span></div>
+      <pre class="code-block" tabindex="0"><code><span class="t-comment"># 貸出画面に表示されたポートとホストに置き換えてください</span>
+ssh -p 19427 pod@gpu.example.org</code></pre>
+      <p class="code-card-note">SSH ユーザーは pod、作業場所は /workspace です。接続先とポートは貸出ごとに発行されます。</p>
+    </div>
+    <p class="section-footnote">作業が終わったら、利用パネルから返却してください。作業データは返却時に削除されます。</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container two-col">
+    <div>
+      <div class="section-head">
+        <h2>接続の仕組み</h2>
+      </div>
+      <p>接続は中央サーバーの中継を経由します。提供PCに公開ポートは不要で、提供PCのIPアドレスや内部IDは利用者に公開されません。</p>
+      <p>貸出ごとに中継ポートが割り当てられ、SSH は利用者の公開鍵で認証します。パスワード認証は使いません。</p>
+      <p class="muted">中継ポートは 19001〜19999 の範囲から貸出ごとに割り当てられます（運用設定により変わります）。</p>
+      <a class="btn btn-ghost" href="/terms/">利用規約を確認する</a>
+    </div>
+    <div class="stack-cards">
+      <div class="info-card">
+        <h3>返却について</h3>
+        <p>利用パネルから返却すると、コンテナと作業データが削除されます。返却を忘れると貸出が続くため、作業後は早めに返却してください。</p>
+      </div>
+      <div class="info-card">
+        <h3>中断について</h3>
+        <p>提供PCの都合で実行が終了する場合があります。無料運用のため、稼働時間や性能の保証はありません。長い処理はこまめに保存してください。</p>
+      </div>
+      <div class="info-card">
+        <h3>公開される情報</h3>
+        <p>GPU名・ベンダー・VRAM・提供者の表示名・空き状態だけを公開します。IPアドレスや内部IDは公開しません。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section-tinted">
+  <div class="container">
+    <div class="section-head">
+      <h2>GPU を提供する</h2>
+      <p class="section-lead">提供PCは中央サーバーへ外向きに接続するだけです。公開ポートや固定IPは必要ありません。</p>
+    </div>
+    <ol class="steps steps-four">
+      <li class="step">
+        <span class="step-no" aria-hidden="true">1</span>
+        <h3>Discord に参加</h3>
+        <p>コミュニティに参加し、提供の条件を確認します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">2</span>
+        <h3>提供PCを登録</h3>
+        <p>提供PC管理から登録し、トークンをエージェントに設定します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">3</span>
+        <h3>環境を確認</h3>
+        <p>Docker と NVIDIA Container Toolkit が動作していることを確認します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">4</span>
+        <h3>受付をON</h3>
+        <p>空き時間だけ受付をONにします。OFFにすれば貸出は止まります。</p>
+      </li>
+    </ol>
+    <div class="notice-actions">
+      <a class="btn btn-primary" href="/providers/">提供者募集の詳細</a>
+      <a class="btn btn-ghost" href="/pricing/">料金の考え方</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cta-panel">
+      <div>
+        <h2>わからないことは Discord で聞いてください</h2>
+        <p class="section-lead">招待リンクからサーバーに参加し、運営または他の利用者に声をかけてください。</p>
+      </div>
+      <div class="cta-actions">
+        {inviteUrl ? (
+        <>
+
+        <a class="btn btn-primary" href="{inviteUrl}" target="_blank" rel="noopener noreferrer">Discord に参加する</a>
+        
+        </>
+      ) : (
+        <>
+
+        <p class="notice-missing">招待リンクが未設定です。運営に招待リンクを確認してください。</p>
+        
+        </>
+      )}
+      </div>
+    </div>
+    <p class="page-updated">最終更新: {updated}</p>
+  </div>
+</section>
+</Layout>

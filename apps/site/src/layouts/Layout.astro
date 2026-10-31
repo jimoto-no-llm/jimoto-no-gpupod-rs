@@ -1,0 +1,90 @@
+---
+// 公開サイトの共通レイアウト。global.css (Tailwind v4) を読み込む。
+export interface Props {
+  title: string;
+  description: string;
+  nav?: "how" | "pricing" | "providers";
+}
+
+const { title, description, nav } = Astro.props;
+import "@/styles/global.css";
+
+const appBase = (import.meta.env.PUBLIC_APP_BASE_URL ?? "").replace(/\/$/, "");
+const inviteUrl = import.meta.env.GPUPOD_DISCORD_INVITE_URL ?? "";
+const guildId = import.meta.env.GPUPOD_DISCORD_GUILD_ID ?? "1551195569429422202";
+const githubUrl = "https://github.com/jimoto-no-llm/jimoto-no-gpupod";
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#fafafa" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Jimoto GPU Pod" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+  </head>
+  <body class="min-h-dvh bg-bg text-ink antialiased">
+    <a class="sr-only" href="#main">本文へスキップ</a>
+
+    <header class="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur">
+      <div class="mx-auto flex h-14 max-w-5xl items-center gap-6 px-5">
+        <a class="flex-none text-sm font-semibold tracking-tight" href="/">Jimoto GPU Pod</a>
+        <nav class="ml-auto hidden items-center gap-1 md:flex" aria-label="メインナビゲーション">
+          <a class="inline-flex h-8 items-center rounded-md px-3 text-[13.5px] text-ink-2 transition-colors hover:bg-raised hover:text-ink" href="/#gpu-board">GPU一覧</a>
+          <a class:list={["inline-flex h-8 items-center rounded-md px-3 text-[13.5px] transition-colors", nav === "pricing" ? "bg-raised font-medium text-ink" : "text-ink-2 hover:bg-raised hover:text-ink"]} href="/pricing/">料金</a>
+          <a class:list={["inline-flex h-8 items-center rounded-md px-3 text-[13.5px] transition-colors", nav === "providers" ? "bg-raised font-medium text-ink" : "text-ink-2 hover:bg-raised hover:text-ink"]} href="/providers/">貸す</a>
+          <a class:list={["inline-flex h-8 items-center rounded-md px-3 text-[13.5px] transition-colors", nav === "how" ? "bg-raised font-medium text-ink" : "text-ink-2 hover:bg-raised hover:text-ink"]} href="/how/">使い方</a>
+          <a class="ml-2 inline-flex h-8 items-center rounded-md bg-ink px-3 text-[13.5px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] hover:bg-[#2b2b2e]" href={appBase + "/login/"}>ログイン</a>
+        </nav>
+        <details class="relative ml-auto md:hidden">
+          <summary class="flex h-8 cursor-pointer list-none items-center gap-2 rounded-md border border-line-2 bg-surface px-3 text-[13px] text-ink-2" aria-label="メニューを開く">メニュー</summary>
+          <div class="absolute right-0 top-9 w-56 rounded-xl border border-line-2 bg-surface p-2 shadow-lg">
+            <nav class="grid gap-0.5" aria-label="モバイルナビゲーション">
+              <a class="rounded-md px-3 py-2 text-[13.5px] text-ink-2 hover:bg-raised hover:text-ink" href="/#gpu-board">GPU一覧</a>
+              <a class="rounded-md px-3 py-2 text-[13.5px] text-ink-2 hover:bg-raised hover:text-ink" href="/pricing/">料金</a>
+              <a class="rounded-md px-3 py-2 text-[13.5px] text-ink-2 hover:bg-raised hover:text-ink" href="/providers/">貸す</a>
+              <a class="rounded-md px-3 py-2 text-[13.5px] text-ink-2 hover:bg-raised hover:text-ink" href="/how/">使い方</a>
+              <a class="rounded-md px-3 py-2 text-[13.5px] text-ink-2 hover:bg-raised hover:text-ink" href="/terms/">利用規約</a>
+              <a class="rounded-md px-3 py-2 text-[13.5px] text-ink-2 hover:bg-raised hover:text-ink" href="/privacy/">プライバシー</a>
+            </nav>
+            <div class="mt-2 border-t border-line pt-2">
+              <a class="block rounded-md bg-ink px-3 py-2 text-center text-[13.5px] font-medium text-white" href={appBase + "/login/"}>ログイン</a>
+            </div>
+          </div>
+        </details>
+      </div>
+    </header>
+
+    <!-- unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. -->
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="mt-16 border-t border-line bg-bg-sub py-10">
+      <div class="mx-auto max-w-5xl px-5">
+        <div class="flex flex-wrap gap-x-8 gap-y-2 text-xs text-ink-3">
+          <span>© {year} Jimoto GPU Pod 運営</span>
+          <a class="text-ink-2 hover:text-ink" href="/terms/">利用規約</a>
+          <a class="text-ink-2 hover:text-ink" href="/privacy/">プライバシー</a>
+          {inviteUrl ? (
+            <a class="text-ink-2 hover:text-ink" href={inviteUrl} target="_blank" rel="noopener noreferrer">Discord</a>
+          ) : (
+            <span>Discord（招待は運営まで）</span>
+          )}
+          <a class="text-ink-2 hover:text-ink" href={githubUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
+          <span>最終更新 2026-10-31</span>
+        </div>
+        <p class="mt-3 text-[11.5px] text-ink-3">
+          提供PCの都合で実行が終了する場合があります。作業データは返却時に削除されます。
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
+

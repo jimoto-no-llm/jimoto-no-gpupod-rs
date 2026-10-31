@@ -17,10 +17,42 @@ Linux の提供者 PC の GPU を、承認済み Docker テンプレートで貸
 | crates/gpupod-control | 中央サーバー（WebUI + API + SSH 中継） | Django の portal / control_panel |
 | crates/gpupod-agent | 提供PC側エージェント（常駐・Docker 操作・中継） | provider_agent/ |
 | crates/gpupod-tools | 補助ツール（診断・設定生成・更新等） | helpers/ |
+| apps/site | 公開サイト（Astro・静的生成） | Django のテンプレートのうち公開ページ |
 
 中央は axum + SQLite（rusqlite）+ サーバーサイドセッション、中継は russh（pure Rust SSH）、
 提供側のコンテナ操作は bollard（Docker Engine API）、状態保存は SQLite + flock、
 ホスト統計は sysinfo + /proc、署名付き更新は ed25519 + SHA-256 の簡易 TUF 風実装を使用します。
+
+## 言語の分担
+
+| 領域 | 言語 |
+| --- | --- |
+| 提供エージェント・SSH 中継・CLI | Rust |
+| 中央 API（貸出・ノード・認証・状態） | Rust |
+| 公開サイト・ダッシュボード | TypeScript（Astro + TanStack） |
+| ベンチ集計・分析 | Python |
+| スキーマ・運用手順 | SQL / Bash |
+
+判断の理由と移行手順は [ADR 0001](docs/adr/0001-web-stack.md) にあります。
+
+## 公開サイト（apps/site）
+
+```bash
+cd apps/site
+pnpm install
+pnpm run build      # dist/ に静的ファイルを出力
+```
+
+ビルド時に在庫を取り込みます。
+
+| 環境変数 | 用途 |
+| --- | --- |
+| GPUPOD_INVENTORY_URL | 在庫 JSON の取得先（未設定なら空在庫でビルド） |
+| GPUPOD_DISCORD_INVITE_URL | 招待リンク（未設定なら「運営に確認」表示） |
+| GPUPOD_DISCORD_GUILD_ID | 参加必須のサーバー ID |
+| PUBLIC_APP_BASE_URL | ログインボタンの遷移先（Rust の WebUI） |
+
+`dist/` を nginx などで配信し、`/login/` や `/console/` は Rust の WebUI へプロキシします。
 
 ## ビルド
 

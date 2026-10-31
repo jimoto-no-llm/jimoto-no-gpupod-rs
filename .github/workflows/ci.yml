@@ -112,3 +112,25 @@ jobs:
           name: test-log
           path: ${{ runner.temp }}/test.log
           retention-days: 7
+
+  site:
+    name: site (astro build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/site/pnpm-lock.yaml
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+      - name: astro build
+        run: pnpm run build
+

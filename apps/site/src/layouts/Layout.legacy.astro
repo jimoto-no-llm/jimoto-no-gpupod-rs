@@ -1,0 +1,76 @@
+---
+// 公開サイトの共通レイアウト。Rust 版 templates/site/base.html と同じ構造・文言。
+export interface Props {
+  title: string;
+  description: string;
+  nav?: "how" | "pricing" | "providers";
+}
+
+const { title, description, nav } = Astro.props;
+const appBase = (import.meta.env.PUBLIC_APP_BASE_URL ?? "").replace(/\/$/, "");
+const inviteUrl = import.meta.env.GPUPOD_DISCORD_INVITE_URL ?? "";
+const guildId = import.meta.env.GPUPOD_DISCORD_GUILD_ID ?? "1551195569429422202";
+const githubUrl = "https://github.com/jimoto-no-llm/jimoto-no-gpupod";
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#f4f1ea" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Jimoto GPU Pod" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">本文へスキップ</a>
+
+    <header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="/">Jimoto GPU Pod</a>
+    <nav class="nav" aria-label="メインナビゲーション">
+      <a href="/#gpu-table" aria-current={nav === "gpu" ? "page" : undefined}>GPU一覧</a>
+      <a href="/providers/" aria-current={nav === "providers" ? "page" : undefined}>貸す</a>
+      <a href="/pricing/" aria-current={nav === "pricing" ? "page" : undefined}>料金</a>
+      <a href="/how/" aria-current={nav === "how" ? "page" : undefined}>使い方</a>
+      <a href={appBase + "/login/"}>ログイン</a>
+    </nav>
+    <details class="nav-mobile">
+      <summary aria-label="メニューを開く">メニュー</summary>
+      <div class="nav-mobile-panel">
+        <nav aria-label="モバイルナビゲーション">
+          <a href="/how/">使い方</a>
+          <a href="/pricing/">料金</a>
+          <a href="/providers/">貸す</a>
+          <a href="/terms/">利用規約</a>
+          <a href="/privacy/">プライバシー</a>
+          <a href={appBase + "/login/"}>ログイン</a>
+        </nav>
+      </div>
+    </details>
+  </div>
+</header>
+
+    <!-- Design pass: unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. -->
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="footer">
+  <div class="container footer-inner">
+    <span>© {year} Jimoto GPU Pod 運営</span>
+    <span><a href="/terms/">利用規約</a></span>
+    <span><a href="/privacy/">プライバシー</a></span>
+    {inviteUrl ? <span><a href={inviteUrl} target="_blank" rel="noopener noreferrer">Discord</a></span> : <span class="muted-soft">Discord（招待は運営まで）</span>}
+    <span><a href={githubUrl} target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span>最終更新 2026-10-31</span>
+  </div>
+</footer>
+  </body>
+</html>

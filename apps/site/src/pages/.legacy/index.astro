@@ -1,0 +1,202 @@
+---
+// 公開トップ。宣伝のLPではなく、「本体の一覧」を最初に出す構成。
+// 在庫はビルド時 GPUPOD_INVENTORY_URL から取得。無ければ空の表。
+import Layout from "../layouts/Layout.astro";
+import inventory from "../data/inventory.json";
+
+const inviteUrl = import.meta.env.GPUPOD_DISCORD_INVITE_URL ?? "";
+const guildId = import.meta.env.GPUPOD_DISCORD_GUILD_ID ?? "1551195569429422202";
+const appBase = (import.meta.env.PUBLIC_APP_BASE_URL ?? "").replace(/\/$/, "");
+
+const title = "個人のGPUを1時間単位で借りる・貸す — Jimoto GPU Pod";
+const description =
+  "登録された提供PCのあいているGPUを、承認済みテンプレートのコンテナで借りられます。接続は中央のSSH中継経由。利用料は無料です。";
+
+const gpus = inventory.gpus ?? [];
+const hasGpus = gpus.length > 0;
+---
+
+<Layout {title} {description}>
+  <div class="intro">
+    <h1>個人のGPUを1時間単位で借りる・貸す</h1>
+    <p>
+      Jimoto GPU Pod は、地域の提供者が空き時間にGPUを貸し出すコミュニティ運営のサービスです。
+      借りる側は承認済みテンプレートのコンテナを SSH で使います。提供PCの IP アドレスは公開されません。
+      利用には Discord サーバーへの参加が必要です。
+    </p>
+    <p class="facts-line">
+      <span>提供PC <b>{inventory.providers}</b> 台</span>
+      <span>GPU <b>{inventory.offered_gpus}</b> 基</span>
+      <span>空き <b class="st-free">{inventory.available_gpus}</b> 基</span>
+      <span>料金 <b>無料</b></span>
+    </p>
+  </div>
+
+  <section id="gpu-table">
+    <h2>GPU の空き状況</h2>
+    {hasGpus ? (
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">GPU</th>
+              <th scope="col" class="num">VRAM</th>
+              <th scope="col">貸し手</th>
+              <th scope="col">状態</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gpus.map((gpu) => (
+              <tr>
+                <td class="gpu">{gpu.name}</td>
+                <td class="num">{gpu.vram}</td>
+                <td>{gpu.provider}</td>
+                <td class={gpu.available ? "st-free" : "st-busy"}>{gpu.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">GPU</th>
+            <th scope="col" class="num">VRAM</th>
+            <th scope="col">貸し手</th>
+            <th scope="col">状態</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="4">いま貸し出せるGPUはありません。提供PCが登録されるとこの表に並びます。</td>
+          </tr>
+        </tbody>
+      </table>
+    )}
+    <p class="meta" style="margin-top:8px">
+      表示はビルド時点のスナップショットです。基本は「貸出可能」です。予約・絞り込みはログイン後のパネルから使えます（
+      <a href={appBase + "/login/"}>ログイン</a>）。
+    </p>
+  </section>
+
+  <section>
+    <h2>使うには</h2>
+    <div class="cols">
+      <div>
+        <ol class="steps-line">
+          <li>
+            Discord サーバーに参加する（ID: <code>{guildId}</code>）。参加は無料で誰でも可能です。
+            {inviteUrl && (
+              <>
+                {" "}
+                <a href={inviteUrl} target="_blank" rel="noopener noreferrer">招待リンク</a>
+              </>
+            )}
+          </li>
+          <li>
+            Discord アカウントで <a href={appBase + "/login/"}>ログイン</a>
+            します。パスワードの新規登録は不要です。
+          </li>
+          <li>
+            パネルで GPU とテンプレートを選び、表示されたポートへ SSH します。
+          </li>
+        </ol>
+        <pre><code>ssh -p 19427 pod@gpu.example.org</code></pre>
+        <p class="meta" style="margin-top:8px">
+          ポートとホストは貸出ごとに発行されます。中央の SSH 中継を経由するため、提供PCに公開ポートは必要ありません。
+        </p>
+      </div>
+      <aside>
+        <h3 style="font-size:14px;margin-bottom:8px">お知らせ</h3>
+        <ul class="news">
+          <li><time>2026-10-31</time><span>サービスを公開しました。当面すべて無料です。</span></li>
+        </ul>
+        <p class="meta" style="margin-top:12px">
+          更新は Discord の #announce で流します。
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <section>
+    <h2>料金</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">項目</th>
+            <th scope="col">金額</th>
+            <th scope="col">備考</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>利用料金</td>
+            <td class="num">無料</td>
+            <td>運営は課金を行いません。</td>
+          </tr>
+          <tr>
+            <td>提供者への支払い</td>
+            <td class="num">なし</td>
+            <td>提供はボランティアベースです。電気代などの実費は提供者の負担です。</td>
+          </tr>
+          <tr>
+            <td>支払い方法の登録</td>
+            <td class="num">不要</td>
+            <td>課金の予定はありません。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="meta" style="margin-top:8px">
+      提供PCの都合で実行が終了する場合があります。稼働時間と性能の保証はありません。
+    </p>
+  </section>
+
+  <section>
+    <h2>GPUを貸す条件</h2>
+    <ul class="ops-list">
+      <li>Docker Engine が動く Linux マシン。NVIDIA・AMD・Intel の GPU に対応します。</li>
+      <li>GPU ドライバーとコンテナ実行環境（NVIDIA は Container Toolkit）は提供者が用意します。</li>
+      <li>公開ポートは不要です。中央への外向き接続（HTTPS と TCP 19000〜19999）だけで動きます。</li>
+      <li>貸出は専用の Docker ネットワークに隔離され、返却時にコンテナとデータを削除します。</li>
+      <li>受付は ON/OFF できます。提供を止めるときは受付 OFF にします（実行中の貸出は維持）。</li>
+    </ul>
+    <p style="margin-top:12px">
+      <a class="btn" href="/providers/">提供方法の詳細</a>
+      {" "}
+      <a class="btn btn-sub" href="/how/">使い方の詳細</a>
+    </p>
+  </section>
+
+  <section>
+    <h2>よくある質問</h2>
+    <dl class="qa">
+      <div>
+        <dt>本当に無料ですか？</dt>
+        <dd>はい。利用料金はかかりません。運営は課金を行いません。提供者の空き時間を使うため、稼働時間と性能の保証はありません。</dd>
+      </div>
+      <div>
+        <dt>Discord に参加しないと使えませんか？</dt>
+        <dd>はい。利用には Discord サーバーへの参加が必要です。参加は無料で、どなたでも可能です。</dd>
+      </div>
+      <div>
+        <dt>GPU を持っていなくても使えますか？</dt>
+        <dd>使えます。借りるだけなら GPU は不要です。</dd>
+      </div>
+      <div>
+        <dt>作業中に提供PCが落ちたら？</dt>
+        <dd>提供PCの都合で実行が終了する場合があります。長い処理はこまめに保存してください。</dd>
+      </div>
+      <div>
+        <dt>作業データは残りますか？</dt>
+        <dd>返却時に削除されます。提供PC側に残り続けることはありません。</dd>
+      </div>
+      <div>
+        <dt>提供PCの IP アドレスは公开されますか？</dt>
+        <dd>公開しません。接続は中央の中継を経由し、この表に出すのは GPU 名・VRAM・貸し手の表示名・状態だけです。</dd>
+      </div>
+    </dl>
+  </section>
+</Layout>

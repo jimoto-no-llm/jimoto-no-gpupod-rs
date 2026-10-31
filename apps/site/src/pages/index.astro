@@ -1,0 +1,196 @@
+---
+// 公開トップ。React island (GPUBoard) に在庫を渡し、TanStack 系 UI で並び替え・絞り込みができる。
+import Layout from "../layouts/Layout.astro";
+import GPUBoard from "@/components/market/gpu-board";
+import { ButtonLink } from "@/components/ui/button";
+import inventory from "@/data/inventory.json";
+
+const inviteUrl = import.meta.env.GPUPOD_DISCORD_INVITE_URL ?? "";
+const guildId = import.meta.env.GPUPOD_DISCORD_GUILD_ID ?? "1551195569429422202";
+const appBase = (import.meta.env.PUBLIC_APP_BASE_URL ?? "").replace(/\/$/, "");
+
+const title = "個人のGPUを借りる・貸す — Jimoto GPU Pod";
+const description =
+  "登録された提供PCのあいているGPUを、承認済みテンプレートのコンテナで借りられます。接続は中央のSSH中継経由。利用料は無料です。";
+---
+
+<Layout {title} {description}>
+  <div class="mx-auto max-w-5xl px-5 pt-10">
+    <h1 class="mt-4 text-2xl font-semibold tracking-tight sm:text-[32px] sm:leading-snug">
+      個人のGPUを、時間単位で借りる・貸す
+    </h1>
+    <p class="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-2">
+      提供者のPCが空いているあいだ、承認済みのコンテナを動かせます。接続は中央サーバーのSSH中継を経由し、提供PCのIPアドレスは公開しません。利用料金はかかりません。
+    </p>
+  </div>
+
+  <div class="mx-auto mt-8 max-w-5xl px-5">
+    <GPUBoard client:load initial={inventory} />
+  </div>
+
+  <section class="mx-auto mt-12 max-w-5xl px-5">
+    <h2 class="border-b border-line-2 pb-2 text-lg font-semibold">接続の経路</h2>
+    <div class="mt-5 grid overflow-hidden rounded-xl border border-line-2 bg-surface md:grid-cols-[1fr_auto_1fr_auto_1fr]">
+      <div class="border-b border-line p-5 md:border-b-0 md:border-r md:border-dashed">
+        <p class="font-serif text-[15px] font-semibold">提供PC</p>
+        <p class="mt-1 text-xs text-ink-3">空き時間だけ提供</p>
+      </div>
+      <div class="relative hidden items-center justify-center md:flex md:w-16" aria-hidden="true">
+        <span class="h-px w-full border-t border-dashed border-line-2"></span>
+        <span class="absolute size-1.5 rounded-sm bg-ok"></span>
+      </div>
+      <div class="border-b border-line p-5 md:border-b-0 md:border-r md:border-dashed">
+        <p class="font-serif text-[15px] font-semibold">中央サーバー</p>
+        <p class="mt-1 text-xs text-ink-3">認証・SSH中継</p>
+      </div>
+      <div class="relative hidden items-center justify-center md:flex md:w-16" aria-hidden="true">
+        <span class="h-px w-full border-t border-dashed border-line-2"></span>
+        <span class="absolute size-1.5 rounded-sm bg-ok"></span>
+      </div>
+      <div class="p-5">
+        <p class="font-serif text-[15px] font-semibold">利用者</p>
+        <p class="mt-1 text-xs text-ink-3">SSHで接続</p>
+      </div>
+    </div>
+
+    <dl class="mt-8 grid grid-cols-1 overflow-hidden rounded-xl border border-line-2 bg-surface sm:grid-cols-2">
+      <div class="grid gap-1 p-5 sm:border-b sm:border-line sm:border-r">
+        <dt class="text-xs text-ink-3">動かせるもの</dt>
+        <dd class="text-sm text-ink-2">運営が承認したテンプレートだけです。ホストのマウントや任意のDockerオプションは指定できません。</dd>
+      </div>
+      <div class="grid gap-1 p-5 sm:border-b sm:border-line">
+        <dt class="text-xs text-ink-3">公開ポート</dt>
+        <dd class="text-sm text-ink-2">提供PC側に公開ポートは不要。外向きの接続だけで動きます。</dd>
+      </div>
+      <div class="grid gap-1 p-5 sm:border-r sm:border-line">
+        <dt class="text-xs text-ink-3">作業データ</dt>
+        <dd class="text-sm text-ink-2">返却時に削除します。提供者のPCに残り続けることはありません。</dd>
+      </div>
+      <div class="grid gap-1 p-5">
+        <dt class="text-xs text-ink-3">料金</dt>
+        <dd class="text-sm text-ink-2">かかりません。運営は利用者からも提供者からもお金を受け取りません。</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="mx-auto mt-12 max-w-5xl px-5">
+    <h2 class="border-b border-line-2 pb-2 text-lg font-semibold">借りるまでの3手順</h2>
+    <ol class="mt-5 grid divide-y divide-line rounded-xl border border-line-2 bg-surface sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <li class="p-5">
+        <span class="block font-mono text-xs text-ok">01</span>
+        <h3 class="mt-2 font-serif text-base font-semibold">Discord に参加</h3>
+        <p class="mt-1 text-[13.5px] text-ink-2">サーバー(ID: <code class="font-mono text-[12px]">{guildId}</code>) に参加します。参加は無料です。
+          {inviteUrl && <a class="underline decoration-line-2 underline-offset-2 hover:decoration-ink" href={inviteUrl} target="_blank" rel="noopener noreferrer">参加リンク</a>}
+        </p>
+      </li>
+      <li class="p-5">
+        <span class="block font-mono text-xs text-ok">02</span>
+        <h3 class="mt-2 font-serif text-base font-semibold">ログイン</h3>
+        <p class="mt-1 text-[13.5px] text-ink-2">「Discord でログイン」からアカウントを連携します。</p>
+      </li>
+      <li class="p-5">
+        <span class="block font-mono text-xs text-ok">03</span>
+        <h3 class="mt-2 font-serif text-base font-semibold">接続</h3>
+        <p class="mt-1 text-[13.5px] text-ink-2">パネルでGPUとテンプレートを選び、表示された接続先へSSHします。</p>
+      </li>
+    </ol>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <ButtonLink size="md" href="/how/">使い方の詳細</ButtonLink>
+      {inviteUrl && <ButtonLink size="md" variant="outline" href={inviteUrl} target="_blank" rel="noopener noreferrer">Discord に参加する</ButtonLink>}
+    </div>
+  </section>
+
+  <section class="mx-auto mt-12 max-w-5xl px-5">
+    <h2 class="border-b border-line-2 pb-2 text-lg font-semibold">GPUを貸す場合</h2>
+    <div class="mt-5 grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
+      <div>
+        <ul class="space-y-1.5 text-sm text-ink-2">
+          <li class="relative pl-5 before:absolute before:left-0 before:top-2.5 before:h-px before:w-2 before:bg-line-2">Docker Engine が動く Linux と対応GPUが必要です。</li>
+          <li class="relative pl-5 before:absolute before:left-0 before:top-2.5 before:h-px before:w-2 before:bg-line-2">GPUドライバーとコンテナ実行環境は提供者が用意します。</li>
+          <li class="relative pl-5 before:absolute before:left-0 before:top-2.5 before:h-px before:w-2 before:bg-line-2">公開ポートは不要。中央への外向き接続だけで動きます。</li>
+          <li class="relative pl-5 before:absolute before:left-0 before:top-2.5 before:h-px before:w-2 before:bg-line-2">受付はON/OFFでき、止めたいときに止められます。</li>
+        </ul>
+        <p class="mt-4 text-sm text-ink-2">電気代・通信費・機材費は提供者の負担です。運営からの支払いはありません。</p>
+      </div>
+      <div class="rounded-xl border border-line-2 bg-surface p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+        <p class="border-b border-line pb-2 font-serif text-sm font-semibold">提供の前に知っておくこと</p>
+        <p class="mt-3 text-[13.5px] leading-relaxed text-ink-2">貸出中のコンテナは提供者のGPUとメモリを使います。負荷が高い時間帯は受付をOFFにしてください。</p>
+        <p class="mt-2 text-[13.5px] leading-relaxed text-ink-2">承認済みテンプレート以外は起動できません。ホストのファイルを渡す仕組みはありません。</p>
+      </div>
+    </div>
+    <div class="mt-5"><ButtonLink variant="outline" href="/providers/">提供方法の詳細</ButtonLink></div>
+  </section>
+
+  <section class="mx-auto mt-12 max-w-5xl px-5 pb-4">
+    <h2 class="border-b border-line-2 pb-2 text-lg font-semibold">利用の上限とランク</h2>
+    <p class="mt-2 max-w-2xl text-sm text-ink-2">全員無料です。公平のために時間と台数に上限を設けています。上限は Discord 参加と利用実績で拡がります。</p>
+    <div class="mt-5 overflow-x-auto rounded-xl border border-line-2 bg-surface">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-line bg-bg-sub">
+            <th class="h-9 px-4 text-left text-xs font-medium text-ink-3">ランク</th>
+            <th class="h-9 px-4 text-left text-xs font-medium text-ink-3">対象</th>
+            <th class="h-9 px-4 text-left text-xs font-medium text-ink-3">同時借り入れ</th>
+            <th class="h-9 px-4 text-left text-xs font-medium text-ink-3">最長連続</th>
+            <th class="h-9 px-4 text-left text-xs font-medium text-ink-3">1日の上限</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="border-b border-line last:border-b-0">
+            <td class="h-11 px-4 align-middle font-medium">Community</td>
+            <td class="h-11 px-4 align-middle text-ink-2">Discord 参加者全員</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">1 GPU</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">4時間（+2h 延長）</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">8時間/日</td>
+          </tr>
+          <tr class="border-b border-line last:border-b-0">
+            <td class="h-11 px-4 align-middle font-medium">Active</td>
+            <td class="h-11 px-4 align-middle text-ink-2">過去30日で5時間以上利用</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">2 GPU</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">12時間</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">24時間/日</td>
+          </tr>
+          <tr class="last:border-b-0">
+            <td class="h-11 px-4 align-middle font-medium">Event</td>
+            <td class="h-11 px-4 align-middle text-ink-2">イベント参加者（時間帯指定）</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">2 GPU</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">12時間</td>
+            <td class="h-11 px-4 align-middle font-mono text-xs tabular-nums text-ink">24時間/日</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mt-3 text-xs text-ink-3">上限に達すると追加の貸出を開始できません（実行中の処理は停止しません）。ランクは自動で判定・付与されます。</p>
+  </section>
+
+  <section class="mx-auto mt-12 max-w-5xl px-5 pb-4">
+    <h2 class="border-b border-line-2 pb-2 text-lg font-semibold">よくある質問</h2>
+    <dl class="mt-4 grid">
+      <div class="border-b border-line pb-4">
+        <dt class="text-sm font-semibold">本当に無料ですか？</dt>
+        <dd class="mt-1 text-sm text-ink-2">はい。利用料金はかかりません。運営は課金を行いません。提供者の空き時間を使うため、稼働時間と性能の保証はありません。</dd>
+      </div>
+      <div class="border-b border-line py-4">
+        <dt class="text-sm font-semibold">Discord に参加しないと使えませんか？</dt>
+        <dd class="mt-1 text-sm text-ink-2">はい。利用には Discord サーバーへの参加が必要です。参加は無料で、どなたでも可能です。</dd>
+      </div>
+      <div class="border-b border-line py-4">
+        <dt class="text-sm font-semibold">GPU を持っていなくても使えますか？</dt>
+        <dd class="mt-1 text-sm text-ink-2">使えます。借りるだけなら GPU は不要です。</dd>
+      </div>
+      <div class="border-b border-line py-4">
+        <dt class="text-sm font-semibold">作業中に提供PCが落ちたら？</dt>
+        <dd class="mt-1 text-sm text-ink-2">提供PCの都合で実行が終了する場合があります。長い処理はこまめに保存してください。</dd>
+      </div>
+      <div class="border-b border-line py-4">
+        <dt class="text-sm font-semibold">作業データは残りますか？</dt>
+        <dd class="mt-1 text-sm text-ink-2">返却時に削除されます。提供PC側に残り続けることはありません。</dd>
+      </div>
+      <div class="py-4">
+        <dt class="text-sm font-semibold">提供PCの IP アドレスは公開されますか？</dt>
+        <dd class="mt-1 text-sm text-ink-2">公開しません。接続は中央サーバーの中継を経由し、公開するのは GPU 名・VRAM・貸し手の表示名・状態だけです。</dd>
+      </div>
+    </dl>
+  </section>
+</Layout>
+

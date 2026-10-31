@@ -1,0 +1,39 @@
+{
+  "providers": 3,
+  "offered_gpus": 4,
+  "available_gpus": 2,
+  "gpus": [
+    {
+      "name": "RTX 4090",
+      "vendor": "NVIDIA",
+      "vram": "24 GiB",
+      "provider": "秋田のラボ",
+      "status": "貸出可能",
+      "available": true
+    },
+    {
+      "name": "RTX 3090",
+      "vendor": "NVIDIA",
+      "vram": "24 GiB",
+      "provider": "秋田のラボ",
+      "status": "利用中",
+      "available": false
+    },
+    {
+      "name": "Radeon RX 7900 XTX",
+      "vendor": "AMD",
+      "vram": "24 GiB",
+      "provider": "大阪の自宅",
+      "status": "貸出可能",
+      "available": true
+    },
+    {
+      "name": "Arc A770",
+      "vendor": "Intel",
+      "vram": "16 GiB",
+      "provider": "札幌の部室",
+      "status": "受付停止",
+      "available": false
+    }
+  ]
+}
