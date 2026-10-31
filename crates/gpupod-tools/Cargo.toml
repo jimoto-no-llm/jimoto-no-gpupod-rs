@@ -37,7 +37,7 @@ flate2.workspace = true
 tar.workspace = true
 bzip2.workspace = true
 # ルート未登録。support_bundle の Python 正規表現（lookbehind）移植にだけ使う。
-fancy-regex = "0.14"
+fancy-regex = "0.20"
 futures-util = "0.3"
 # ルートの rand_core のみ。TUF 風署名のため PKCS#8 DER 変換を追加で有効化する。
 ed25519-dalek = { workspace = true, features = ["pkcs8"] }
