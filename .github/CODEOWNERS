@@ -1,0 +1,17 @@
+# すべての変更の既定レビュアー。
+# 実際の運用に合わせて、チーム（@org/team）や担当者へ置き換えてください。
+* @lasder-ca
+
+# 中央サーバー（WebUI・API・中継・認証）
+/crates/gpupod-control/ @lasder-ca
+
+# 提供PC側エージェント（Docker操作・中継・状態管理）
+/crates/gpupod-agent/ @lasder-ca
+
+# 配布・運用手順（デプロイや障害対応に直結）
+/.github/workflows/ @lasder-ca
+/Dockerfile @lasder-ca
+/docker-compose.yml @lasder-ca
+/docs/ @lasder-ca
+/scripts/ @lasder-ca
+/SECURITY.md @lasder-ca

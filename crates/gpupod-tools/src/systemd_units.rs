@@ -19,7 +19,9 @@ pub fn quote(value: &str) -> Result<String> {
 
 fn valid_user(user: &str) -> bool {
     let bytes = user.as_bytes();
-    let first = bytes.first().is_some_and(|b| b.is_ascii_lowercase() || *b == b'_');
+    let first = bytes
+        .first()
+        .is_some_and(|b| b.is_ascii_lowercase() || *b == b'_');
     first
         && bytes
             .iter()
@@ -118,16 +120,16 @@ pub fn generate(
     );
     units.insert(
         "gpupod-relay.service".to_string(),
-        common
-            + &environment
-            + &format!("ExecStart={python} manage.py runrelay\n",)
-            + suffix,
+        common + &environment + &format!("ExecStart={python} manage.py runrelay\n",) + suffix,
     );
     Ok(units)
 }
 
 /// ファイルへ書き出し、出力パスを返す。
-pub fn write_units(units: &BTreeMap<String, String>, output_dir: &Path) -> Result<Vec<std::path::PathBuf>> {
+pub fn write_units(
+    units: &BTreeMap<String, String>,
+    output_dir: &Path,
+) -> Result<Vec<std::path::PathBuf>> {
     std::fs::create_dir_all(output_dir)?;
     let mut written = Vec::new();
     for (name, content) in units {
@@ -172,7 +174,8 @@ mod tests {
         );
         assert!(units["gpupod-provider.service"].contains("Type=notify"));
         assert!(!units["gpupod-provider.service"].contains("Type=simple"));
-        assert!(units["gpupod-auto.service"].contains("helpers/auto_lend.py --state-dir \"/var/lib/gpupod\" --mode drain"));
+        assert!(units["gpupod-auto.service"]
+            .contains("helpers/auto_lend.py --state-dir \"/var/lib/gpupod\" --mode drain"));
     }
 
     #[test]
@@ -182,8 +185,11 @@ mod tests {
         let web = &units["gpupod-web.service"];
         assert!(web.contains("Environment=GPUPOD_CONTROL_STATE=\"/var/lib/gpupod\""));
         assert!(web.contains("EnvironmentFile=-/var/lib/gpupod/control.env"));
-        assert!(web.contains("ExecStart=\"/srv/gpupod/.venv/bin/gunicorn\" control_panel.wsgi:application"));
-        assert!(units["gpupod-relay.service"].contains("ExecStart=\"/srv/gpupod/.venv/bin/python\" manage.py runrelay"));
+        assert!(web.contains(
+            "ExecStart=\"/srv/gpupod/.venv/bin/gunicorn\" control_panel.wsgi:application"
+        ));
+        assert!(units["gpupod-relay.service"]
+            .contains("ExecStart=\"/srv/gpupod/.venv/bin/python\" manage.py runrelay"));
     }
 
     #[test]
@@ -194,7 +200,9 @@ mod tests {
         assert!(service.contains("Type=oneshot"));
         assert!(!service.contains("Restart=on-failure"));
         assert!(service.contains("TimeoutStartSec=900"));
-        assert!(service.contains("helpers/update_agent.py --config \"/srv/gpupod/.provider-state/node.secret.json\""));
+        assert!(service.contains(
+            "helpers/update_agent.py --config \"/srv/gpupod/.provider-state/node.secret.json\""
+        ));
         assert!(units["gpupod-update.timer"].contains("OnUnitActiveSec=1h"));
         assert!(units["gpupod-update.timer"].contains("WantedBy=timers.target"));
     }

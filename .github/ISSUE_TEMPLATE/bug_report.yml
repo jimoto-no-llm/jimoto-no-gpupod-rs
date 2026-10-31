@@ -1,0 +1,78 @@
+name: バグ報告
+description: 動作がおかしい、エラーになる、つながらない
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        不具合の報告ありがとうございます。**セキュリティ上の問題（認証回避、情報漏えい、権限昇格など）はここに書かず、[SECURITY.md](../../SECURITY.md) の手順で非公開に報告してください。**
+
+        GPU・Docker・ネットワークに関わる場合は、再現に使った環境をできるだけ具体的に書いてください。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 起きたこと
+      description: 期待した動作と、実際に起きた動作
+      placeholder: |
+        期待: パネルに提供PCがオンラインで表示される
+        実際: オンラインにならず、エージェントのログに 401 が出る
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 第三者が同じ手順をたどれるように書いてください
+      placeholder: |
+        1. docker compose up -d を実行
+        2. http://localhost:8000/ を開く
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: 影響する役割
+      multiple: true
+      options:
+        - 中央サーバー（gpupod-control）
+        - 提供PCエージェント（gpupod-agent）
+        - 補助ツール（gpupod-tools）
+        - Docker / docker-compose
+        - ドキュメント
+        - その他
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: バージョン / コミット
+      description: リポジトリのコミットID、またはタグ名
+      placeholder: e86ae9b
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境
+      description: OS、Rust のバージョン、Docker の有無、GPU、接続方式（中継 / 直接）
+      placeholder: |
+        OS: Ubuntu 24.04
+        Rust: 1.85
+        Docker: 27.x
+        GPU: NVIDIA RTX 4090 / なし（mock）
+        接続方式: 中央中継
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ・エラーメッセージ
+      description: 秘密情報（トークン、node-*.secret.json、SSH 秘密鍵）は伏せてください。support-bundle の出力は添付前に中身を確認してください。
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認事項
+      options:
+        - label: 既存の Issue と docs/ を確認した
+          required: true
+        - label: 秘密情報を本文に含めていない
+          required: true

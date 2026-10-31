@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use gpupod_agent::docker::{DockerEngine, DockerError};
 use gpupod_agent::Lease;
-use gpupod_common::{GPU, Template};
+use gpupod_common::{Template, GPU};
 use serde_json::{json, Value};
 
 /// 成功経路を既定とし、失敗・停止を注入できるモック。

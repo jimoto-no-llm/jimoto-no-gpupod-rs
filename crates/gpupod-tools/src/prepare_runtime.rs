@@ -14,7 +14,9 @@ pub const SHA512_X86_64: &str = "7cbc2aeeee809dcccfb40e612504a1b76f2c119790cee59
 const MAX_BUNDLE_BYTES: u64 = 200 * 1024 * 1024;
 
 pub fn bundle_url() -> String {
-    format!("https://storage.googleapis.com/gvisor/releases/release/{VERSION}/x86_64/gvisor.tar.bz2")
+    format!(
+        "https://storage.googleapis.com/gvisor/releases/release/{VERSION}/x86_64/gvisor.tar.bz2"
+    )
 }
 
 /// バンドルを取得し、安全に展開して daemon.json を生成する。生成した設定のパスを返す。
@@ -31,7 +33,8 @@ pub fn prepare(output: &Path, source_config: Option<&Path>, gpu: bool) -> Result
     let mut config = match source_config {
         Some(path) if path.exists() => {
             let raw = std::fs::read_to_string(path).context("Cannot read the Docker config")?;
-            serde_json::from_str::<serde_json::Value>(&raw).context("Cannot parse the Docker config")?
+            serde_json::from_str::<serde_json::Value>(&raw)
+                .context("Cannot parse the Docker config")?
         }
         _ => serde_json::json!({}),
     };
@@ -68,7 +71,10 @@ fn download(url: &str, destination: &Path) -> Result<()> {
         .send()
         .context("Cannot download the runtime bundle")?;
     if !response.status().is_success() {
-        bail!("Runtime bundle download failed with status {}", response.status());
+        bail!(
+            "Runtime bundle download failed with status {}",
+            response.status()
+        );
     }
     let mut file = std::fs::File::create(destination).context("Cannot store the runtime bundle")?;
     let mut length: u64 = 0;
@@ -86,7 +92,8 @@ fn download(url: &str, destination: &Path) -> Result<()> {
             bail!("Runtime bundle exceeds the expected size");
         }
         digest.update(&buffer[..read]);
-        file.write_all(&buffer[..read]).context("Cannot store the runtime bundle")?;
+        file.write_all(&buffer[..read])
+            .context("Cannot store the runtime bundle")?;
     }
     file.flush().ok();
     Ok(())
@@ -97,7 +104,9 @@ fn verify_digest(path: &Path) -> Result<()> {
     let mut file = std::fs::File::open(path).context("Cannot reopen the runtime bundle")?;
     let mut buffer = [0u8; 65536];
     loop {
-        let read = file.read(&mut buffer).context("Cannot read the runtime bundle")?;
+        let read = file
+            .read(&mut buffer)
+            .context("Cannot read the runtime bundle")?;
         if read == 0 {
             break;
         }
@@ -115,7 +124,10 @@ pub fn extract_tar_bz2(archive_path: &Path, output: &Path) -> Result<()> {
     let file = std::fs::File::open(archive_path).context("Cannot open the runtime bundle")?;
     let decoder = bzip2::read::BzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
-    for entry in archive.entries().context("Cannot read the runtime bundle")? {
+    for entry in archive
+        .entries()
+        .context("Cannot read the runtime bundle")?
+    {
         let mut entry = entry.context("Cannot read the runtime bundle")?;
         let path = entry.path()?.into_owned();
         if path.is_absolute() || path.components().any(|c| c.as_os_str() == "..") {
@@ -133,7 +145,8 @@ pub fn extract_tar_bz2(archive_path: &Path, output: &Path) -> Result<()> {
         if let Some(parent) = destination.parent() {
             std::fs::create_dir_all(parent).context("Cannot create the runtime directory")?;
         }
-        let mut target = std::fs::File::create(&destination).context("Cannot write the runtime file")?;
+        let mut target =
+            std::fs::File::create(&destination).context("Cannot write the runtime file")?;
         std::io::copy(&mut entry, &mut target).context("Cannot write the runtime file")?;
         crate::support::files::fs_set_mode(&destination, 0o755)?;
     }
@@ -184,13 +197,18 @@ mod tests {
         );
         let output = tempfile::tempdir().unwrap();
         extract_tar_bz2(&archive, output.path()).unwrap();
-        assert_eq!(std::fs::read(output.path().join("runsc")).unwrap(), b"binary");
+        assert_eq!(
+            std::fs::read(output.path().join("runsc")).unwrap(),
+            b"binary"
+        );
         assert_eq!(
             std::fs::read(output.path().join("doc/readme.txt")).unwrap(),
             b"text"
         );
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(output.path().join("runsc")).unwrap().permissions();
+        let mode = std::fs::metadata(output.path().join("runsc"))
+            .unwrap()
+            .permissions();
         assert_eq!(mode.mode() & 0o777, 0o755);
     }
 
@@ -199,8 +217,13 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let archive = build_archive(directory.path(), &[("../escape", b"evil")]);
         let output = tempfile::tempdir().unwrap();
-        let error = extract_tar_bz2(&archive, output.path()).unwrap_err().to_string();
-        assert!(error.contains("Unexpected runtime archive member"), "{error}");
+        let error = extract_tar_bz2(&archive, output.path())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("Unexpected runtime archive member"),
+            "{error}"
+        );
         assert!(!output.path().join("escape").exists());
     }
 
@@ -209,8 +232,13 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let archive = build_archive(directory.path(), &[("/etc/gpupod-escape", b"evil")]);
         let output = tempfile::tempdir().unwrap();
-        let error = extract_tar_bz2(&archive, output.path()).unwrap_err().to_string();
-        assert!(error.contains("Unexpected runtime archive member"), "{error}");
+        let error = extract_tar_bz2(&archive, output.path())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("Unexpected runtime archive member"),
+            "{error}"
+        );
     }
 
     #[test]

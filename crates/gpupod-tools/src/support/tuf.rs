@@ -134,7 +134,10 @@ pub fn verify(document: &Value, role: &str, trust: &RootTrust) -> Result<Value> 
         let Ok(key) = VerifyingKey::from_bytes(raw) else {
             continue;
         };
-        if key.verify(&bytes, &Signature::from_bytes(&bytes_sig)).is_ok() {
+        if key
+            .verify(&bytes, &Signature::from_bytes(&bytes_sig))
+            .is_ok()
+        {
             valid += 1;
         }
     }
@@ -211,22 +214,39 @@ pub fn verify_root(document: &Value) -> Result<Value> {
         if !allowed.iter().any(|item| item.as_str() == Some(keyid)) {
             continue;
         }
-        let Some(raw) = keys.get(keyid).and_then(|v| v.get("public")).and_then(|v| v.as_str()) else {
+        let Some(raw) = keys
+            .get(keyid)
+            .and_then(|v| v.get("public"))
+            .and_then(|v| v.as_str())
+        else {
             continue;
         };
-        let Ok(decoded) = STANDARD.decode(raw) else { continue };
+        let Ok(decoded) = STANDARD.decode(raw) else {
+            continue;
+        };
         let Ok(raw_bytes) = <[u8; 32]>::try_from(decoded.as_slice()) else {
             continue;
         };
-        let Some(signature) = entry.get("sig").and_then(|v| v.as_str()).map(str::to_string) else {
+        let Some(signature) = entry
+            .get("sig")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+        else {
             continue;
         };
-        let Ok(decoded) = STANDARD.decode(signature) else { continue };
+        let Ok(decoded) = STANDARD.decode(signature) else {
+            continue;
+        };
         let Ok(bytes_sig) = <[u8; 64]>::try_from(decoded.as_slice()) else {
             continue;
         };
-        let Ok(key) = VerifyingKey::from_bytes(&raw_bytes) else { continue };
-        if key.verify(&bytes, &Signature::from_bytes(&bytes_sig)).is_ok() {
+        let Ok(key) = VerifyingKey::from_bytes(&raw_bytes) else {
+            continue;
+        };
+        if key
+            .verify(&bytes, &Signature::from_bytes(&bytes_sig))
+            .is_ok()
+        {
             return Ok(signed.clone());
         }
     }
@@ -270,7 +290,10 @@ mod tests {
         let mut public = BTreeMap::new();
         public.insert(root_id, verifying_key(&root_key));
         public.insert(targets_id, targets_public);
-        let trust = RootTrust { keys: public, roles };
+        let trust = RootTrust {
+            keys: public,
+            roles,
+        };
         assert_eq!(verify(&document, "targets", &trust).unwrap()["version"], 1);
         assert!(verify(&document, "snapshot", &trust).is_err());
     }
@@ -290,7 +313,10 @@ mod tests {
         roles.insert("timestamp".to_string(), vec![]);
         let mut public = BTreeMap::new();
         public.insert(root_id, root_public);
-        let trust = RootTrust { keys: public, roles };
+        let trust = RootTrust {
+            keys: public,
+            roles,
+        };
         let mut tampered = document.clone();
         tampered["signed"]["version"] = json!(2);
         assert!(verify(&tampered, "targets", &trust).is_err());

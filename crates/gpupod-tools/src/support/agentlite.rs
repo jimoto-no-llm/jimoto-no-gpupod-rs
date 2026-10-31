@@ -60,11 +60,7 @@ impl Agent {
         let stop = busy && mode == "stop";
         let leases = self.store.with_locked(|state| {
             state.auto_busy = busy;
-            Ok(if stop {
-                active_ids(state)
-            } else {
-                Vec::new()
-            })
+            Ok(if stop { active_ids(state) } else { Vec::new() })
         })?;
         for lease_id in leases {
             self.cleanup(&lease_id)?;
@@ -80,7 +76,9 @@ impl Agent {
         ssh_public_key: &str,
     ) -> Result<serde_json::Value> {
         let Some(template) = self.templates.get(template_id).cloned() else {
-            bail!(AgentError::new("Only registered template IDs can be started"));
+            bail!(AgentError::new(
+                "Only registered template IDs can be started"
+            ));
         };
         super::devices::validate_gpu_group(
             &self.gpus.values().cloned().collect::<Vec<_>>(),
@@ -97,55 +95,61 @@ impl Agent {
             })
             .collect::<Result<_, _>>()?;
         let lease_id = uuid::Uuid::new_v4().simple().to_string();
-        let (node_id, lease) = self.store.with_locked(|state| {
-            if state.manual_enabled {
-                bail!(AgentError::new("Turn lending OFF before running diagnostics"));
-            }
-            let claimed = claimed_gpus(state);
-            if gpu_ids.iter().any(|id| claimed.contains(id)) {
-                bail!(AgentError::new("GPU is already allocated or awaiting cleanup"));
-            }
-            let pool = state
-                .resource_pool
-                .clone()
-                .filter(|value| !value.is_null())
-                .map(resources::Pool::from_value)
-                .transpose()?;
-            let allocations: Vec<Option<resources::Allocation>> = state
-                .leases
-                .values()
-                .filter(|lease| lease.get("status").and_then(|v| v.as_str()) != Some("stopped"))
-                .map(|lease| match lease.get("resources") {
-                    None | Some(serde_json::Value::Null) => None,
-                    Some(value) => serde_json::from_value(value.clone()).ok(),
-                })
-                .collect();
-            let reserved = resources::claim(pool.as_ref(), &allocations, None, None)?;
-            let lease = json!({
-                "id": lease_id,
-                "gpu_id": gpu_ids[0],
-                "gpu_ids": gpu_ids,
-                "template_id": template_id,
-                "image": template.image,
-                "container": format!("gpulend-{lease_id}"),
-                "volume": format!("gpulend-work-{lease_id}"),
-                "network": format!("gpulend-net-{lease_id}"),
-                "status": "starting",
-                "created_at": Utc::now().to_rfc3339(),
-                "ssh_public_key": ssh_public_key,
-                "diagnostic": true,
-            });
-            let mut lease = lease;
-            if let Some(reserved) = reserved {
-                lease["resources"] = serde_json::json!({
-                    "memory_bytes": reserved.memory_bytes,
-                    "disk_bytes": reserved.disk_bytes,
+        let (node_id, lease) = self
+            .store
+            .with_locked(|state| {
+                if state.manual_enabled {
+                    bail!(AgentError::new(
+                        "Turn lending OFF before running diagnostics"
+                    ));
+                }
+                let claimed = claimed_gpus(state);
+                if gpu_ids.iter().any(|id| claimed.contains(id)) {
+                    bail!(AgentError::new(
+                        "GPU is already allocated or awaiting cleanup"
+                    ));
+                }
+                let pool = state
+                    .resource_pool
+                    .clone()
+                    .filter(|value| !value.is_null())
+                    .map(resources::Pool::from_value)
+                    .transpose()?;
+                let allocations: Vec<Option<resources::Allocation>> = state
+                    .leases
+                    .values()
+                    .filter(|lease| lease.get("status").and_then(|v| v.as_str()) != Some("stopped"))
+                    .map(|lease| match lease.get("resources") {
+                        None | Some(serde_json::Value::Null) => None,
+                        Some(value) => serde_json::from_value(value.clone()).ok(),
+                    })
+                    .collect();
+                let reserved = resources::claim(pool.as_ref(), &allocations, None, None)?;
+                let lease = json!({
+                    "id": lease_id,
+                    "gpu_id": gpu_ids[0],
+                    "gpu_ids": gpu_ids,
+                    "template_id": template_id,
+                    "image": template.image,
+                    "container": format!("gpulend-{lease_id}"),
+                    "volume": format!("gpulend-work-{lease_id}"),
+                    "network": format!("gpulend-net-{lease_id}"),
+                    "status": "starting",
+                    "created_at": Utc::now().to_rfc3339(),
+                    "ssh_public_key": ssh_public_key,
+                    "diagnostic": true,
                 });
-            }
-            state.leases.insert(lease_id.clone(), lease.clone());
-            Ok((state.node_id.clone(), lease))
-        })
-        .map_err(|exc| anyhow::anyhow!(exc))?;
+                let mut lease = lease;
+                if let Some(reserved) = reserved {
+                    lease["resources"] = serde_json::json!({
+                        "memory_bytes": reserved.memory_bytes,
+                        "disk_bytes": reserved.disk_bytes,
+                    });
+                }
+                state.leases.insert(lease_id.clone(), lease.clone());
+                Ok((state.node_id.clone(), lease))
+            })
+            .map_err(|exc| anyhow::anyhow!(exc))?;
         let result = self.launch(&node_id, &lease, &template, &gpus);
         match result {
             Ok(value) => Ok(value),
@@ -171,21 +175,16 @@ impl Agent {
         let volume = lease["volume"].as_str().unwrap_or_default().to_string();
         let network = lease["network"].as_str().unwrap_or_default().to_string();
         let lease_id = lease["id"].as_str().unwrap_or_default().to_string();
-        let key = lease["ssh_public_key"].as_str().unwrap_or_default().to_string();
+        let key = lease["ssh_public_key"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         let memory = lease
             .get("resources")
             .and_then(|value| value.get("memory_bytes"))
             .and_then(|value| value.as_i64());
         self.engine.create_diagnostic(
-            &lease_id,
-            node_id,
-            &container,
-            &volume,
-            &network,
-            template,
-            gpus,
-            &key,
-            memory,
+            &lease_id, node_id, &container, &volume, &network, template, gpus, &key, memory,
         )?;
         self.engine.start(&container)?;
         let value = self.engine.describe(&container, &lease_id, node_id)?;
@@ -238,7 +237,10 @@ impl Agent {
         let container = lease["container"].as_str().unwrap_or_default();
         let volume = lease["volume"].as_str().unwrap_or_default();
         let network = lease["network"].as_str().unwrap_or_default();
-        match self.engine.cleanup(container, volume, network, lease_id, &node_id) {
+        match self
+            .engine
+            .cleanup(container, volume, network, lease_id, &node_id)
+        {
             Ok(()) => {}
             Err(exc) => {
                 self.store.with_locked(|state| {
@@ -336,7 +338,9 @@ fn claimed_gpus(state: &State) -> Vec<String> {
             continue;
         }
         match lease.get("gpu_ids").and_then(|v| v.as_array()) {
-            Some(items) => claimed.extend(items.iter().filter_map(|v| v.as_str().map(str::to_string))),
+            Some(items) => {
+                claimed.extend(items.iter().filter_map(|v| v.as_str().map(str::to_string)))
+            }
             None => claimed.extend(
                 lease
                     .get("gpu_id")

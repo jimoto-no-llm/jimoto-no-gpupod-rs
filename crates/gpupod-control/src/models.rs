@@ -47,7 +47,10 @@ pub fn find_user(conn: &Connection, user_id: i64) -> rusqlite::Result<Option<Use
     .optional()
 }
 
-pub fn find_user_by_username(conn: &Connection, username: &str) -> rusqlite::Result<Option<UserRow>> {
+pub fn find_user_by_username(
+    conn: &Connection,
+    username: &str,
+) -> rusqlite::Result<Option<UserRow>> {
     conn.query_row(
         &format!("SELECT {USER_COLUMNS} FROM auth_user WHERE username = ?1"),
         params![username],
@@ -119,7 +122,8 @@ impl NodeRow {
             None => false,
             Some(seen) => match (parse_dt(seen), parse_dt(now_text)) {
                 (Some(seen), Some(now_value)) => {
-                    seen > now_value - chrono::Duration::seconds(crate::config::NODE_TIMEOUT_SECONDS)
+                    seen > now_value
+                        - chrono::Duration::seconds(crate::config::NODE_TIMEOUT_SECONDS)
                 }
                 _ => false,
             },
@@ -142,7 +146,8 @@ impl NodeRow {
     }
 }
 
-const NODE_COLUMNS: &str = "id, name, token_hash, previous_token_hash, previous_token_until, pending_token_hash,
+const NODE_COLUMNS: &str =
+    "id, name, token_hash, previous_token_hash, previous_token_until, pending_token_hash,
     pending_token_until, pending_rotation_id, rotation_id, update_channel, enabled, desired_enabled,
     last_seen, snapshot, statistics, benchmark_download_after, benchmark_upload_after";
 
@@ -218,7 +223,9 @@ pub fn get_node_enabled(conn: &Connection, hex_id: &str) -> rusqlite::Result<Opt
 
 /// Django は ORDER BY なし = テーブル走査順。
 pub fn list_nodes(conn: &Connection) -> rusqlite::Result<Vec<NodeRow>> {
-    let mut statement = conn.prepare(&format!("SELECT {NODE_COLUMNS} FROM portal_node ORDER BY rowid"))?;
+    let mut statement = conn.prepare(&format!(
+        "SELECT {NODE_COLUMNS} FROM portal_node ORDER BY rowid"
+    ))?;
     let rows = statement.query_map([], node_from_row)?;
     rows.collect()
 }
@@ -245,7 +252,12 @@ pub fn save_node_snapshot(
 ) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE portal_node SET snapshot = ?2, statistics = ?3, last_seen = ?4 WHERE id = ?1",
-        params![hex_id, snapshot.to_string(), statistics.to_string(), last_seen],
+        params![
+            hex_id,
+            snapshot.to_string(),
+            statistics.to_string(),
+            last_seen
+        ],
     )?;
     Ok(())
 }
@@ -286,14 +298,19 @@ pub fn list_enabled_templates(conn: &Connection) -> rusqlite::Result<Vec<Templat
 }
 
 pub fn list_templates(conn: &Connection) -> rusqlite::Result<Vec<TemplateRow>> {
-    let mut statement =
-        conn.prepare("SELECT id, name, definition, enabled FROM portal_workloadtemplate ORDER BY rowid")?;
+    let mut statement = conn.prepare(
+        "SELECT id, name, definition, enabled FROM portal_workloadtemplate ORDER BY rowid",
+    )?;
     let rows = statement.query_map([], template_from_row)?;
     rows.collect()
 }
 
 /// sync-templates の upsert（既存は enabled を維持し、新規のみ enabled=1）。
-pub fn upsert_template(conn: &Connection, id: &str, definition: &serde_json::Value) -> rusqlite::Result<()> {
+pub fn upsert_template(
+    conn: &Connection,
+    id: &str,
+    definition: &serde_json::Value,
+) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO portal_workloadtemplate (id, name, definition, enabled) VALUES (?1, ?1, ?2, 1)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, definition = excluded.definition",
@@ -351,7 +368,8 @@ impl LeaseRow {
     }
 }
 
-const LEASE_COLUMNS: &str = "id, user_id, node_id, gpu_id, template_id, status, active, ssh_public_key,
+const LEASE_COLUMNS: &str =
+    "id, user_id, node_id, gpu_id, template_id, status, active, ssh_public_key,
     connection_mode, error, created_at, updated_at, memory_bytes, disk_bytes";
 
 fn lease_from_row(row: &Row<'_>) -> rusqlite::Result<LeaseRow> {
@@ -383,7 +401,11 @@ pub fn get_lease(conn: &Connection, hex_id: &str) -> rusqlite::Result<Option<Lea
 }
 
 /// 自分の貸出（-created_at、30 件）。
-pub fn list_user_leases(conn: &Connection, user_id: i64, limit: i64) -> rusqlite::Result<Vec<LeaseRow>> {
+pub fn list_user_leases(
+    conn: &Connection,
+    user_id: i64,
+    limit: i64,
+) -> rusqlite::Result<Vec<LeaseRow>> {
     let mut statement = conn.prepare(&format!(
         "SELECT {LEASE_COLUMNS} FROM portal_lease WHERE user_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT ?2"
     ))?;
@@ -400,7 +422,10 @@ pub fn list_active_leases(conn: &Connection) -> rusqlite::Result<Vec<LeaseRow>> 
     rows.collect()
 }
 
-pub fn list_node_active_leases(conn: &Connection, node_id: &str) -> rusqlite::Result<Vec<LeaseRow>> {
+pub fn list_node_active_leases(
+    conn: &Connection,
+    node_id: &str,
+) -> rusqlite::Result<Vec<LeaseRow>> {
     let mut statement = conn.prepare(&format!(
         "SELECT {LEASE_COLUMNS} FROM portal_lease WHERE node_id = ?1 AND active ORDER BY created_at DESC, rowid DESC"
     ))?;
@@ -408,7 +433,11 @@ pub fn list_node_active_leases(conn: &Connection, node_id: &str) -> rusqlite::Re
     rows.collect()
 }
 
-pub fn active_lease_exists(conn: &Connection, node_id: &str, gpu_id: &str) -> rusqlite::Result<bool> {
+pub fn active_lease_exists(
+    conn: &Connection,
+    node_id: &str,
+    gpu_id: &str,
+) -> rusqlite::Result<bool> {
     let found: Option<i64> = conn
         .query_row(
             "SELECT 1 FROM portal_lease WHERE node_id = ?1 AND gpu_id = ?2 AND active",
@@ -455,7 +484,10 @@ pub fn insert_lease(
 
 pub fn save_lease(conn: &Connection, lease: &LeaseRow) -> rusqlite::Result<()> {
     conn.execute(
-        &format!("UPDATE portal_lease SET {LEASE_COLUMNS} WHERE id = ?1"),
+        "UPDATE portal_lease SET user_id = ?2, node_id = ?3, gpu_id = ?4, template_id = ?5,
+                status = ?6, active = ?7, ssh_public_key = ?8, connection_mode = ?9, error = ?10,
+                created_at = ?11, updated_at = ?12, memory_bytes = ?13, disk_bytes = ?14
+         WHERE id = ?1",
         params![
             lease.id,
             lease.user_id,
@@ -536,7 +568,11 @@ pub fn insert_command(
     Ok(id)
 }
 
-pub fn get_pending_command(conn: &Connection, id: &str, node_id: &str) -> rusqlite::Result<Option<CommandRow>> {
+pub fn get_pending_command(
+    conn: &Connection,
+    id: &str,
+    node_id: &str,
+) -> rusqlite::Result<Option<CommandRow>> {
     conn.query_row(
         "SELECT id, node_id, lease_id, kind, payload, done, result, created_at
          FROM portal_nodecommand WHERE id = ?1 AND node_id = ?2 AND NOT done",
@@ -547,7 +583,11 @@ pub fn get_pending_command(conn: &Connection, id: &str, node_id: &str) -> rusqli
 }
 
 /// 未完了コマンド（created_at, id 順、先頭 20 件）。
-pub fn pending_commands(conn: &Connection, node_id: &str, limit: i64) -> rusqlite::Result<Vec<CommandRow>> {
+pub fn pending_commands(
+    conn: &Connection,
+    node_id: &str,
+    limit: i64,
+) -> rusqlite::Result<Vec<CommandRow>> {
     let mut statement = conn.prepare(
         "SELECT id, node_id, lease_id, kind, payload, done, result, created_at
          FROM portal_nodecommand WHERE node_id = ?1 AND NOT done ORDER BY created_at, id LIMIT ?2",
@@ -556,7 +596,11 @@ pub fn pending_commands(conn: &Connection, node_id: &str, limit: i64) -> rusqlit
     rows.collect()
 }
 
-pub fn mark_command_done(conn: &Connection, id: &str, result: &serde_json::Value) -> rusqlite::Result<()> {
+pub fn mark_command_done(
+    conn: &Connection,
+    id: &str,
+    result: &serde_json::Value,
+) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE portal_nodecommand SET done = 1, result = ?2 WHERE id = ?1",
         params![id, result.to_string()],
@@ -597,7 +641,12 @@ pub fn used_relay_ports(conn: &Connection) -> rusqlite::Result<std::collections:
     rows.collect()
 }
 
-pub fn insert_route(conn: &Connection, lease_id: &str, container_port: &str, relay_port: i64) -> rusqlite::Result<()> {
+pub fn insert_route(
+    conn: &Connection,
+    lease_id: &str,
+    container_port: &str,
+    relay_port: i64,
+) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO portal_relayroute (lease_id, container_port, relay_port) VALUES (?1, ?2, ?3)",
         params![lease_id, container_port, relay_port],
@@ -606,7 +655,10 @@ pub fn insert_route(conn: &Connection, lease_id: &str, container_port: &str, rel
 }
 
 pub fn delete_routes_of_lease(conn: &Connection, lease_id: &str) -> rusqlite::Result<usize> {
-    conn.execute("DELETE FROM portal_relayroute WHERE lease_id = ?1", params![lease_id])
+    conn.execute(
+        "DELETE FROM portal_relayroute WHERE lease_id = ?1",
+        params![lease_id],
+    )
 }
 
 /// 同期応答に入れる経路（active かつ running の貸出のみ）。
@@ -621,7 +673,10 @@ pub fn routes_for_node(conn: &Connection, node_id: &str) -> rusqlite::Result<Vec
 }
 
 /// 中継が許可してよいポート（active かつ running の貸出のみ）。
-pub fn relay_ports_for_node(conn: &Connection, node_id: &str) -> rusqlite::Result<std::collections::BTreeSet<i64>> {
+pub fn relay_ports_for_node(
+    conn: &Connection,
+    node_id: &str,
+) -> rusqlite::Result<std::collections::BTreeSet<i64>> {
     let mut statement = conn.prepare(
         "SELECT r.relay_port FROM portal_relayroute r JOIN portal_lease l ON l.id = r.lease_id
          WHERE l.node_id = ?1 AND l.active AND l.status = 'running'",
@@ -722,7 +777,12 @@ pub fn get_session(conn: &Connection, key: &str) -> rusqlite::Result<Option<Sess
     .optional()
 }
 
-pub fn write_session(conn: &Connection, key: &str, data: &str, expire: &str) -> rusqlite::Result<()> {
+pub fn write_session(
+    conn: &Connection,
+    key: &str,
+    data: &str,
+    expire: &str,
+) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO django_session (session_key, session_data, expire_date) VALUES (?1, ?2, ?3)
          ON CONFLICT(session_key) DO UPDATE SET session_data = excluded.session_data,
@@ -733,9 +793,187 @@ pub fn write_session(conn: &Connection, key: &str, data: &str, expire: &str) -> 
 }
 
 pub fn delete_session(conn: &Connection, key: &str) -> rusqlite::Result<usize> {
-    conn.execute("DELETE FROM django_session WHERE session_key = ?1", params![key])
+    conn.execute(
+        "DELETE FROM django_session WHERE session_key = ?1",
+        params![key],
+    )
 }
 
 pub fn purge_expired_sessions(conn: &Connection, now_text: &str) -> rusqlite::Result<usize> {
-    conn.execute("DELETE FROM django_session WHERE expire_date <= ?1", params![now_text])
+    conn.execute(
+        "DELETE FROM django_session WHERE expire_date <= ?1",
+        params![now_text],
+    )
+}
+
+/// portal_oauth_identity の 1 行。
+#[derive(Debug, Clone)]
+pub struct OAuthIdentityRow {
+    pub provider: String,
+    pub subject: String,
+    pub user_id: i64,
+    pub created_at: String,
+}
+
+fn oauth_identity_from_row(row: &Row<'_>) -> rusqlite::Result<OAuthIdentityRow> {
+    Ok(OAuthIdentityRow {
+        provider: row.get("provider")?,
+        subject: row.get("subject")?,
+        user_id: row.get("user_id")?,
+        created_at: row.get("created_at")?,
+    })
+}
+
+pub fn find_oauth_identity(
+    conn: &Connection,
+    provider: &str,
+    subject: &str,
+) -> rusqlite::Result<Option<OAuthIdentityRow>> {
+    conn.query_row(
+        "SELECT provider, subject, user_id, created_at FROM portal_oauth_identity
+         WHERE provider = ?1 AND subject = ?2",
+        params![provider, subject],
+        oauth_identity_from_row,
+    )
+    .optional()
+}
+
+pub fn find_oauth_identity_by_user(
+    conn: &Connection,
+    provider: &str,
+    user_id: i64,
+) -> rusqlite::Result<Option<OAuthIdentityRow>> {
+    conn.query_row(
+        "SELECT provider, subject, user_id, created_at FROM portal_oauth_identity
+         WHERE provider = ?1 AND user_id = ?2",
+        params![provider, user_id],
+        oauth_identity_from_row,
+    )
+    .optional()
+}
+
+pub fn insert_oauth_identity(
+    conn: &Connection,
+    provider: &str,
+    subject: &str,
+    user_id: i64,
+    created_at: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO portal_oauth_identity (provider, subject, user_id, created_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![provider, subject, user_id, created_at],
+    )?;
+    Ok(())
+}
+
+pub fn delete_oauth_identity_for_user(
+    conn: &Connection,
+    provider: &str,
+    user_id: i64,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM portal_oauth_identity WHERE provider = ?1 AND user_id = ?2",
+        params![provider, user_id],
+    )
+}
+
+/// portal_userprofile の 1 行。
+#[derive(Debug, Clone)]
+pub struct UserProfileRow {
+    pub user_id: i64,
+    pub display_name: String,
+    pub avatar_url: String,
+    pub updated_at: String,
+}
+
+pub fn get_user_profile(
+    conn: &Connection,
+    user_id: i64,
+) -> rusqlite::Result<Option<UserProfileRow>> {
+    conn.query_row(
+        "SELECT user_id, display_name, avatar_url, updated_at FROM portal_userprofile WHERE user_id = ?1",
+        params![user_id],
+        |row| {
+            Ok(UserProfileRow {
+                user_id: row.get("user_id")?,
+                display_name: row.get("display_name")?,
+                avatar_url: row.get("avatar_url")?,
+                updated_at: row.get("updated_at")?,
+            })
+        },
+    )
+    .optional()
+}
+
+pub fn upsert_user_profile(
+    conn: &Connection,
+    user_id: i64,
+    display_name: &str,
+    avatar_url: &str,
+    updated_at: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO portal_userprofile (user_id, display_name, avatar_url, updated_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name,
+                                            avatar_url = excluded.avatar_url,
+                                            updated_at = excluded.updated_at",
+        params![user_id, display_name, avatar_url, updated_at],
+    )?;
+    Ok(())
+}
+
+/// portal_oauth_state の 1 行（OAuth の一時 state）。
+#[derive(Debug, Clone)]
+pub struct OAuthStateRow {
+    pub state: String,
+    pub code_verifier: String,
+    pub link_user_id: Option<i64>,
+    pub expires_at: String,
+    pub created_at: String,
+}
+
+fn oauth_state_from_row(row: &Row<'_>) -> rusqlite::Result<OAuthStateRow> {
+    Ok(OAuthStateRow {
+        state: row.get("state")?,
+        code_verifier: row.get("code_verifier")?,
+        link_user_id: row.get("link_user_id")?,
+        expires_at: row.get("expires_at")?,
+        created_at: row.get("created_at")?,
+    })
+}
+
+pub fn insert_oauth_state(
+    conn: &Connection,
+    state: &str,
+    code_verifier: &str,
+    link_user_id: Option<i64>,
+    expires_at: &str,
+    created_at: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO portal_oauth_state (state, code_verifier, link_user_id, expires_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![state, code_verifier, link_user_id, expires_at, created_at],
+    )?;
+    Ok(())
+}
+
+/// state を取り出して同時に削除する（単回使用の保証）。
+pub fn take_oauth_state(conn: &Connection, state: &str) -> rusqlite::Result<Option<OAuthStateRow>> {
+    conn.query_row(
+        "DELETE FROM portal_oauth_state WHERE state = ?1
+         RETURNING state, code_verifier, link_user_id, expires_at, created_at",
+        params![state],
+        oauth_state_from_row,
+    )
+    .optional()
+}
+
+pub fn purge_expired_oauth_states(conn: &Connection, now_text: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM portal_oauth_state WHERE expires_at <= ?1",
+        params![now_text],
+    )
 }

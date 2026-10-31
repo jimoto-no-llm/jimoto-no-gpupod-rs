@@ -43,7 +43,12 @@ pub fn run(options: &Options) -> Result<serde_json::Value> {
         devices::load_gpus(options.devices.as_deref())?
     };
     let mut agent = Agent::new(&options.state_dir, engine, templates, gpus)?;
-    diagnose(&mut agent, &options.gpus, &options.template, options.mock_gpu)
+    diagnose(
+        &mut agent,
+        &options.gpus,
+        &options.template,
+        options.mock_gpu,
+    )
 }
 
 pub fn diagnose(
@@ -84,7 +89,14 @@ pub fn diagnose(
     }
     let (exit_code, output) = executed?;
     if exit_code != 0 {
-        let tail: String = output.chars().rev().take(3000).collect::<String>().chars().rev().collect();
+        let tail: String = output
+            .chars()
+            .rev()
+            .take(3000)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
         bail!(AgentError::new(format!("GPU diagnostic failed: {tail}")));
     }
     let last_line = output

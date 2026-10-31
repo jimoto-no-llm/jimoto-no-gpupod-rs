@@ -1,0 +1,32 @@
+[Unit]
+Description=Jimoto GPU Pod provider agent
+Documentation=https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/blob/main/docs/deploy.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 提供 PC の運用ユーザーに置き換える（Docker ソケットを操作できる必要がある）
+User=provider
+# ホストの Docker ソケットのグループ名に合わせる（例: docker）
+SupplementaryGroups=docker
+WorkingDirectory=/var/lib/gpupod/provider
+Environment=GPUPOD_AGENT_STATE=/var/lib/gpupod/provider
+ExecStart=/usr/local/bin/gpupod-agent \
+  --state-dir /var/lib/gpupod/provider \
+  --templates /usr/local/share/gpupod/templates.json \
+  daemon --config /etc/gpupod/node-provider.secret.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+# GPU デバイスと Docker ソケットを使うため、デバイスの制限はしない
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/gpupod/provider
+
+[Install]
+WantedBy=multi-user.target

@@ -18,17 +18,25 @@ use crate::services::{self, ServiceError};
 
 /// 同期 API のボディ上限（スナップショット + 結果）。
 const SYNC_BODY_LIMIT: usize = 32 * 1024 * 1024;
-/// 測定アップロードの上限（64 MiB）。
-const UPLOAD_LIMIT: u64 = 64 * MIB;
+/// 鍵交換 API のボディ上限。中身は id と鍵だけなので小さく保つ。
+const ROTATION_BODY_LIMIT: usize = 8 * 1024;
+/// ボディ読取の期限（遅い接続で作業スレッドを占有させない）。
+const SYNC_BODY_DEADLINE: Duration = Duration::from_secs(60);
 /// アップロードの読取期限（Python 版の deadline と同じ 60 秒）。
 const UPLOAD_DEADLINE: Duration = Duration::from_secs(60);
+/// 機材キーの最大長（受信側でハッシュ計算を膨らませない）。
+const MAX_TOKEN_BYTES: usize = 512;
 
 fn json_response(status: StatusCode, value: &Value, no_store: bool) -> Response {
     let mut response = Response::new(axum::body::Body::from(django_json(value)));
     *response.status_mut() = status;
-    response.headers_mut().insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
     if no_store {
-        response.headers_mut().insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
     }
     response
 }
@@ -38,9 +46,26 @@ fn error_response(status: StatusCode, message: &str) -> Response {
 }
 
 /// Bearer トークンを取り出す。
+///
+/// スキーム名は大文字小文字を区別しない（RFC 7235）。空や過大な値は
+/// 空トークンとして扱い、認証側で拒否させる。
 fn bearer(headers: &HeaderMap) -> String {
-    let raw = headers.get(header::AUTHORIZATION).and_then(|value| value.to_str().ok()).unwrap_or("");
-    raw.strip_prefix("Bearer ").map(str::to_owned).unwrap_or_default()
+    let raw = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+    let mut parts = raw.splitn(2, ' ');
+    let (Some(scheme), Some(token)) = (parts.next(), parts.next()) else {
+        return String::new();
+    };
+    if !scheme.eq_ignore_ascii_case("Bearer") {
+        return String::new();
+    }
+    let token = token.trim();
+    if token.len() > MAX_TOKEN_BYTES {
+        return String::new();
+    }
+    token.to_owned()
 }
 
 /// POST /api/nodes/<id>/sync/ （node_sync）
@@ -61,9 +86,14 @@ pub async fn node_sync(
         }
     };
 
-    let body = match axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT).await {
-        Ok(body) => body,
-        Err(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid payload"),
+    let body = match tokio::time::timeout(
+        SYNC_BODY_DEADLINE,
+        axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT),
+    )
+    .await
+    {
+        Ok(Ok(body)) => body,
+        _ => return error_response(StatusCode::BAD_REQUEST, "Invalid payload"),
     };
     let payload: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
@@ -102,16 +132,26 @@ pub async fn node_token_prepare(
             None => return error_response(StatusCode::FORBIDDEN, "Invalid node credential"),
         }
     };
-    let body = match axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT).await {
+    let body = match axum::body::to_bytes(request.into_body(), ROTATION_BODY_LIMIT).await {
         Ok(body) => body,
-        Err(_) => return error_response(StatusCode::CONFLICT, "Credential rotation was not accepted"),
+        Err(_) => {
+            return error_response(StatusCode::CONFLICT, "Credential rotation was not accepted")
+        }
     };
     let payload: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
-        Err(_) => return error_response(StatusCode::CONFLICT, "Credential rotation was not accepted"),
+        Err(_) => {
+            return error_response(StatusCode::CONFLICT, "Credential rotation was not accepted")
+        }
     };
-    let rotation = payload.get("id").and_then(|value| value.as_str()).unwrap_or("");
-    let replacement = payload.get("token").and_then(|value| value.as_str()).unwrap_or("");
+    let rotation = payload
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let replacement = payload
+        .get("token")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
     let conn = app.db.lock();
     match services::prepare_rotation(&conn, &node, rotation, replacement) {
         Ok(result) => json_response(StatusCode::OK, &result, true),
@@ -127,22 +167,43 @@ pub async fn node_token_commit(
 ) -> Response {
     let node_hex = match models::uuid_to_hex(&node_id) {
         Some(hex) => hex,
-        None => return error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+        None => {
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Credential rotation was not confirmed",
+            )
+        }
     };
     let token = bearer(request.headers());
-    let body = match axum::body::to_bytes(request.into_body(), SYNC_BODY_LIMIT).await {
+    let body = match axum::body::to_bytes(request.into_body(), ROTATION_BODY_LIMIT).await {
         Ok(body) => body,
-        Err(_) => return error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+        Err(_) => {
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Credential rotation was not confirmed",
+            )
+        }
     };
     let payload: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
-        Err(_) => return error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+        Err(_) => {
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Credential rotation was not confirmed",
+            )
+        }
     };
-    let rotation = payload.get("id").and_then(|value| value.as_str()).unwrap_or("");
+    let rotation = payload
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
     let conn = app.db.lock();
     match services::commit_rotation(&conn, &node_hex, rotation, &token) {
         Ok(result) => json_response(StatusCode::OK, &result, true),
-        Err(_) => error_response(StatusCode::FORBIDDEN, "Credential rotation was not confirmed"),
+        Err(_) => error_response(
+            StatusCode::FORBIDDEN,
+            "Credential rotation was not confirmed",
+        ),
     }
 }
 
@@ -179,7 +240,10 @@ pub async fn node_benchmark(
     let size: u64 = match raw_size.parse() {
         Ok(value) if (MIB..=MAX_NETWORK_BYTES).contains(&value) => value,
         _ => {
-            return error_response(StatusCode::BAD_REQUEST, "Sample must have a length between 1 and 64 MiB")
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Sample must have a length between 1 and 64 MiB",
+            )
         }
     };
 
@@ -189,7 +253,9 @@ pub async fn node_benchmark(
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .unwrap_or("");
-        if !content_type.starts_with("application/octet-stream") || request.headers().contains_key("content-encoding") {
+        if !content_type.starts_with("application/octet-stream")
+            || request.headers().contains_key("content-encoding")
+        {
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "Upload must be uncompressed application/octet-stream",
@@ -199,14 +265,21 @@ pub async fn node_benchmark(
 
     let claimed = {
         let conn = app.db.lock();
-        benchmarks::claim(&conn, &node.id, if download { "download" } else { "upload" })
+        benchmarks::claim(
+            &conn,
+            &node.id,
+            if download { "download" } else { "upload" },
+        )
     };
     if claimed != Ok(true) {
-        let mut response =
-            error_response(StatusCode::TOO_MANY_REQUESTS, "Measurement cooldown");
-        response
-            .headers_mut()
-            .insert(header::RETRY_AFTER, crate::config::BENCHMARK_COOLDOWN_SECONDS.to_string().parse().unwrap());
+        let mut response = error_response(StatusCode::TOO_MANY_REQUESTS, "Measurement cooldown");
+        response.headers_mut().insert(
+            header::RETRY_AFTER,
+            crate::config::BENCHMARK_COOLDOWN_SECONDS
+                .to_string()
+                .parse()
+                .unwrap(),
+        );
         return response;
     }
 
@@ -225,18 +298,31 @@ pub async fn node_benchmark(
         }
         let mut response = Response::new(axum::body::Body::from(payload));
         *response.status_mut() = StatusCode::OK;
-        response.headers_mut().insert(header::CONTENT_TYPE, "application/octet-stream".parse().unwrap());
-        response.headers_mut().insert(header::CONTENT_LENGTH, size.to_string().parse().unwrap());
-        response.headers_mut().insert("x-accel-buffering", "no".parse().unwrap());
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            "application/octet-stream".parse().unwrap(),
+        );
         response
             .headers_mut()
-            .insert(header::CACHE_CONTROL, "no-store, no-transform".parse().unwrap());
+            .insert(header::CONTENT_LENGTH, size.to_string().parse().unwrap());
+        response
+            .headers_mut()
+            .insert("x-accel-buffering", "no".parse().unwrap());
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            "no-store, no-transform".parse().unwrap(),
+        );
         return response;
     }
 
     // アップロード: Python 版と同じく size バイトだけ読み切ることを確認する。
     let body = request.into_body();
-    let bytes = match tokio::time::timeout(UPLOAD_DEADLINE, axum::body::to_bytes(body, size as usize)).await {
+    let bytes = match tokio::time::timeout(
+        UPLOAD_DEADLINE,
+        axum::body::to_bytes(body, size as usize),
+    )
+    .await
+    {
         Ok(Ok(bytes)) => bytes,
         _ => return error_response(StatusCode::BAD_REQUEST, "Incomplete or timed-out sample"),
     };
@@ -248,8 +334,9 @@ pub async fn node_benchmark(
         &serde_json::json!({"received_bytes": bytes.len()}),
         false,
     );
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, "no-store, no-transform".parse().unwrap());
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        "no-store, no-transform".parse().unwrap(),
+    );
     response
 }

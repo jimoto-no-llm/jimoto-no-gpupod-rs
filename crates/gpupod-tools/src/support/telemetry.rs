@@ -18,7 +18,10 @@ pub struct IdlePolicy {
 
 impl IdlePolicy {
     pub fn new(idle_seconds: f64) -> Self {
-        IdlePolicy { idle_seconds, idle_since: None }
+        IdlePolicy {
+            idle_seconds,
+            idle_since: None,
+        }
     }
 
     /// 判定不能は idle の証拠にしない（Python 版と同一の規則）。
@@ -65,7 +68,11 @@ pub fn collect(gpus: &[GPU], disk_path: &Path) -> serde_json::Value {
             if !device.starts_with("/dev/dri/render") {
                 continue;
             }
-            let name = Path::new(device).file_name().unwrap().to_string_lossy().to_string();
+            let name = Path::new(device)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
             let root = PathBuf::from("/sys/class/drm").join(name).join("device");
             value["utilization_percent"] = read_number(&root.join("gpu_busy_percent"));
             let used = read_number(&root.join("mem_info_vram_used"));
@@ -109,9 +116,14 @@ fn nvidia_sensors() -> Option<BTreeMap<String, BTreeMap<String, serde_json::Valu
             continue;
         }
         let mut map = BTreeMap::new();
-        for (index, key) in ["utilization_percent", "memory_used_mib", "temperature_c", "power_w"]
-            .iter()
-            .enumerate()
+        for (index, key) in [
+            "utilization_percent",
+            "memory_used_mib",
+            "temperature_c",
+            "power_w",
+        ]
+        .iter()
+        .enumerate()
         {
             map.insert(
                 (*key).to_string(),
@@ -195,7 +207,8 @@ fn read_cpu_times() -> (u64, u64) {
 pub fn disk_usage(path: &Path) -> std::io::Result<(u64, u64)> {
     use std::ffi::CString;
     let text = path.to_string_lossy().to_string();
-    let c_text = CString::new(text).map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    let c_text =
+        CString::new(text).map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
     let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
     let code = unsafe { libc::statvfs(c_text.as_ptr(), &mut stat) };
     if code != 0 {
@@ -212,11 +225,7 @@ pub fn process_is_borrower(pid: i32, container_ids: &[String], proc_root: &Path)
 }
 
 /// 借手以外の GPU 利用を True、所有者が分からない場合を None で返す。
-pub fn external_gpu_activity(
-    gpus: &[GPU],
-    container_ids: &[String],
-    proc_root: &Path,
-) -> Activity {
+pub fn external_gpu_activity(gpus: &[GPU], container_ids: &[String], proc_root: &Path) -> Activity {
     if gpus.is_empty() {
         return None;
     }
@@ -272,7 +281,11 @@ pub fn external_gpu_activity(
             Some(true) => {}
         }
     }
-    if unknown { None } else { Some(false) }
+    if unknown {
+        None
+    } else {
+        Some(false)
+    }
 }
 
 #[cfg(test)]

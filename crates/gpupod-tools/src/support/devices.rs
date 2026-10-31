@@ -81,7 +81,9 @@ pub fn discover_gpus() -> Vec<GPU> {
                     continue;
                 }
                 let uuid = row[0].trim().to_string();
-                let Ok(bus) = normalize_pci(row[1].trim()) else { continue };
+                let Ok(bus) = normalize_pci(row[1].trim()) else {
+                    continue;
+                };
                 let memory: i64 = row[3].trim().parse().unwrap_or(0);
                 let gpu = GPU {
                     id: format!("pci:{bus}"),
@@ -133,7 +135,10 @@ pub fn discover_gpus() -> Vec<GPU> {
         let gpu = GPU {
             id: format!("pci:{bus}"),
             vendor: vendor.into(),
-            name: format!("{vendor} {}", read_text(&device.join("device")).unwrap_or_else(|| bus.clone())),
+            name: format!(
+                "{vendor} {}",
+                read_text(&device.join("device")).unwrap_or_else(|| bus.clone())
+            ),
             backend: "device".into(),
             selector: String::new(),
             devices: paths,
@@ -145,7 +150,9 @@ pub fn discover_gpus() -> Vec<GPU> {
 }
 
 fn read_text(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|value| value.trim().to_string())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
 }
 
 /// nvidia-smi の 8 桁 PCI ドメインを 4 桁に正規化する。
@@ -193,7 +200,11 @@ pub(crate) fn csv_rows(text: &str) -> Vec<Vec<String>> {
 }
 
 /// 診断 GPU 群の検証（Python 版 Agent.start の該当部分）。
-pub fn validate_gpu_group(gpus: &[GPU], template_vendors: &[String], requested: &[String]) -> Result<()> {
+pub fn validate_gpu_group(
+    gpus: &[GPU],
+    template_vendors: &[String],
+    requested: &[String],
+) -> Result<()> {
     if requested.is_empty() {
         bail!(AgentError::new("Invalid diagnostic GPU group"));
     }
@@ -207,7 +218,9 @@ pub fn validate_gpu_group(gpus: &[GPU], template_vendors: &[String], requested: 
         chosen.push(gpu);
     }
     if chosen.iter().any(|gpu| gpu.vendor != chosen[0].vendor)
-        || !chosen.iter().all(|gpu| template_vendors.contains(&gpu.vendor))
+        || !chosen
+            .iter()
+            .all(|gpu| template_vendors.contains(&gpu.vendor))
     {
         bail!(AgentError::new(
             "Template does not declare support for this GPU vendor"

@@ -7,11 +7,11 @@
 use std::sync::Arc;
 
 use base64::Engine;
+use gpupod_common::Template;
 use gpupod_control::db::{fmt_dt, now};
 use gpupod_control::models::{self, new_uuid_hex};
 use gpupod_control::services::{self, ServiceError};
 use gpupod_control::{App, Config};
-use gpupod_common::Template;
 use rusqlite::params;
 use serde_json::json;
 
@@ -80,15 +80,25 @@ fn accepting_node(app: &App, name: &str, fingerprint: &str) -> models::NodeRow {
             params![node.id, fmt_dt(now()), snapshot.to_string()],
         )
         .expect("update node");
-        models::get_node(&conn, &node.id).expect("node").expect("node row")
+        models::get_node(&conn, &node.id)
+            .expect("node")
+            .expect("node row")
     }
 }
 
 /// 利用者を作る。
 fn create_user(app: &App) -> i64 {
     let conn = app.db.lock();
-    models::insert_user(&conn, "tester", &gpupod_control::auth::hash_password("pw"), false, false, true, "")
-        .expect("user")
+    models::insert_user(
+        &conn,
+        "tester",
+        &gpupod_control::auth::hash_password("pw"),
+        false,
+        false,
+        true,
+        "",
+    )
+    .expect("user")
 }
 
 #[test]
@@ -113,22 +123,30 @@ fn token_rotation_round_trip() {
     // 短すぎる交換鍵は拒否。
     {
         let conn = app.db.lock();
-        let error = services::prepare_rotation(&conn, &node, &rotation_hyphenated, "short").unwrap_err();
-        assert!(matches!(&error, ServiceError::Agent(message) if message == "Invalid replacement credential"));
+        let error =
+            services::prepare_rotation(&conn, &node, &rotation_hyphenated, "short").unwrap_err();
+        assert!(
+            matches!(&error, ServiceError::Agent(message) if message == "Invalid replacement credential")
+        );
     }
     // 現在と同じ鍵は "fresh credential" で拒否。
     {
         let conn = app.db.lock();
-        let error = services::prepare_rotation(&conn, &node, &rotation_hyphenated, &token).unwrap_err();
-        assert!(matches!(&error, ServiceError::Agent(message) if message == "The replacement must be a fresh credential"));
+        let error =
+            services::prepare_rotation(&conn, &node, &rotation_hyphenated, &token).unwrap_err();
+        assert!(
+            matches!(&error, ServiceError::Agent(message) if message == "The replacement must be a fresh credential")
+        );
     }
     // 準備は同一ローテーションなら再実行できる。
     {
         let conn = app.db.lock();
-        let first = services::prepare_rotation(&conn, &node, &rotation_hyphenated, &fresh).expect("prepare");
+        let first = services::prepare_rotation(&conn, &node, &rotation_hyphenated, &fresh)
+            .expect("prepare");
         assert_eq!(first["status"], "prepared");
         assert_eq!(first["id"], rotation_hyphenated);
-        services::prepare_rotation(&conn, &node, &rotation_hyphenated, &fresh).expect("prepare again");
+        services::prepare_rotation(&conn, &node, &rotation_hyphenated, &fresh)
+            .expect("prepare again");
     }
     // 別のローテーションが並行して来たら拒否。
     {
@@ -136,18 +154,22 @@ fn token_rotation_round_trip() {
         let other = uuid::Uuid::new_v4().to_string();
         let other_token = "M".repeat(40);
         let error = services::prepare_rotation(&conn, &node, &other, &other_token).unwrap_err();
-        assert!(matches!(&error, ServiceError::Agent(message) if message == "Another credential rotation is pending"));
+        assert!(
+            matches!(&error, ServiceError::Agent(message) if message == "Another credential rotation is pending")
+        );
     }
 
     // コミット（Bearer の新鍵）で本鍵が切り替わる。
     {
         let conn = app.db.lock();
         let node = models::get_node(&conn, &node.id).unwrap().unwrap();
-        let done = services::commit_rotation(&conn, &node.id, &rotation_hyphenated, &fresh).expect("commit");
+        let done = services::commit_rotation(&conn, &node.id, &rotation_hyphenated, &fresh)
+            .expect("commit");
         assert_eq!(done["status"], "complete");
         assert_eq!(done["id"], rotation_hyphenated);
         // 同じローテーションの再コミットは冪等。
-        let again = services::commit_rotation(&conn, &node.id, &rotation_hyphenated, &fresh).expect("commit again");
+        let again = services::commit_rotation(&conn, &node.id, &rotation_hyphenated, &fresh)
+            .expect("commit again");
         assert_eq!(again["status"], "complete");
     }
 
@@ -173,7 +195,9 @@ fn token_rotation_round_trip() {
         let conn = app.db.lock();
         let missing = uuid::Uuid::new_v4().to_string();
         let error = services::commit_rotation(&conn, &node.id, &missing, &fresh).unwrap_err();
-        assert!(matches!(&error, ServiceError::Agent(message) if message == "Replacement credential was not prepared"));
+        assert!(
+            matches!(&error, ServiceError::Agent(message) if message == "Replacement credential was not prepared")
+        );
     }
 }
 
@@ -186,7 +210,10 @@ fn cohort_release_assignment_is_stable() {
     // sha256(str(node.pk))[:8] % 10000 は Python 版と同じ値。
     // ノード ID はランダムなので、固定 UUID の既知値で Python 互換を検証する
     // （python: int(hashlib.sha256(u.encode()).hexdigest()[:8], 16) % 10000 == 6119）。
-    assert_eq!(services::cohort_bucket("00000000-0000-0000-0000-000000000001"), 6119);
+    assert_eq!(
+        services::cohort_bucket("00000000-0000-0000-0000-000000000001"),
+        6119
+    );
     // 実ノードでは呼び出しごとに同じ値で、str(uuid)（ハイフン付き）をハッシュする。
     let bucket = services::cohort_bucket(&node.uuid_str());
     assert_eq!(bucket, services::cohort_bucket(&node.uuid_str()));
@@ -240,7 +267,11 @@ fn cohort_release_assignment_is_stable() {
             let assigned = services::assigned_release(&conn, &node);
             // Python: bucket < rollout_percent * 100 のとき割当。
             let expected = (percent * 100) as u32 > bucket;
-            assert_eq!(assigned.is_some(), expected, "percent={percent} bucket={bucket}");
+            assert_eq!(
+                assigned.is_some(),
+                expected,
+                "percent={percent} bucket={bucket}"
+            );
             if let Some(assignment) = assigned {
                 assert_eq!(assignment.sequence, 10);
                 assert_eq!(assignment.version, "0.1.0");
@@ -298,7 +329,10 @@ fn relay_ports_are_assigned_without_overlap() {
                     && route.relay_port <= app.cfg.relay_port_max as i64,
                 "割当ポートは範囲内"
             );
-            assert_ne!(route.relay_port, app.cfg.relay_port as i64, "制御ポートは使わない");
+            assert_ne!(
+                route.relay_port, app.cfg.relay_port as i64,
+                "制御ポートは使わない"
+            );
             used.push(route.relay_port);
         }
     }
@@ -341,12 +375,18 @@ fn relay_ports_are_assigned_without_overlap() {
         None,
     )
     .unwrap_err();
-    assert!(matches!(&error, ServiceError::Agent(message) if message == "中央中継は貸出ごとに最大4ポートです。"));
+    assert!(
+        matches!(&error, ServiceError::Agent(message) if message == "中央中継は貸出ごとに最大4ポートです。")
+    );
     // 失敗した貸出行は残らない（Python 版はトランザクションでロールバック）。
     {
         let conn = app.db.lock();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM portal_lease WHERE template_id = 'wide'", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM portal_lease WHERE template_id = 'wide'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert_eq!(count, 0);
     }
@@ -387,7 +427,9 @@ fn reserve_conflicts_are_rejected() {
         None,
     )
     .unwrap_err();
-    assert!(matches!(&error, ServiceError::Agent(message) if message == "このGPUは貸出中、または後片付け中です。"));
+    assert!(
+        matches!(&error, ServiceError::Agent(message) if message == "このGPUは貸出中、または後片付け中です。")
+    );
 
     // one_active_gpu_lease: active の重複は部分 UNIQUE INDEX で弾かれる。
     {
@@ -438,7 +480,9 @@ fn reserve_conflicts_are_rejected() {
         None,
     )
     .unwrap_err();
-    assert!(matches!(&error, ServiceError::Agent(message) if message == "このGPUは貸出中、または後片付け中です。"));
+    assert!(
+        matches!(&error, ServiceError::Agent(message) if message == "このGPUは貸出中、または後片付け中です。")
+    );
     let error = services::reserve(
         &app.db,
         &app.cfg,
@@ -452,7 +496,9 @@ fn reserve_conflicts_are_rejected() {
         None,
     )
     .unwrap_err();
-    assert!(matches!(&error, ServiceError::Agent(message) if message == "提供PCと一致する承認済みテンプレートを選択してください。"));
+    assert!(
+        matches!(&error, ServiceError::Agent(message) if message == "提供PCと一致する承認済みテンプレートを選択してください。")
+    );
 
     // 受付停止中は予約できない。
     {
@@ -476,7 +522,9 @@ fn reserve_conflicts_are_rejected() {
         None,
     )
     .unwrap_err();
-    assert!(matches!(&error, ServiceError::Agent(message) if message == "この提供PCは現在、新規の貸出を受け付けていません。"));
+    assert!(
+        matches!(&error, ServiceError::Agent(message) if message == "この提供PCは現在、新規の貸出を受け付けていません。")
+    );
 }
 
 #[test]
@@ -549,7 +597,9 @@ fn sync_node_updates_lease_state() {
     // start の結果を返すとコマンドは done になり acknowledged に入る。
     let command_id = {
         let conn = app.db.lock();
-        models::pending_commands(&conn, &node.id, 20).unwrap()[0].id.clone()
+        models::pending_commands(&conn, &node.id, 20).unwrap()[0]
+            .id
+            .clone()
     };
     let with_result = json!({
         "state": snapshot,
@@ -557,39 +607,50 @@ fn sync_node_updates_lease_state() {
         "results": [{"id": models::hex_to_uuid(&command_id), "ok": true}],
     });
     let response = services::sync_node(&app.db, &node, &with_result).expect("sync with result");
-    assert_eq!(response.acknowledged, vec![models::hex_to_uuid(&command_id)]);
+    assert_eq!(
+        response.acknowledged,
+        vec![models::hex_to_uuid(&command_id)]
+    );
     assert!(response.commands.is_empty(), "完了したコマンドは渡さない");
     {
         let conn = app.db.lock();
-        assert!(models::pending_commands(&conn, &node.id, 20).unwrap().is_empty());
+        assert!(models::pending_commands(&conn, &node.id, 20)
+            .unwrap()
+            .is_empty());
     }
 
     // GPU が一致しない場合は identity mismatch。
     let mut mismatch = snapshot.clone();
     mismatch["leases"][lease.id.clone()]["gpu_id"] = json!("gpu-7");
-    let error =
-        services::sync_node(&app.db, &node, &json!({"state": mismatch, "results": []})).unwrap_err();
+    let error = services::sync_node(&app.db, &node, &json!({"state": mismatch, "results": []}))
+        .unwrap_err();
     assert!(matches!(&error, ServiceError::Agent(message) if message == "Lease identity mismatch"));
 
     // stopped を受けたら active 解除と経路削除が行われる。
     let mut stopped = snapshot.clone();
     stopped["leases"][lease.id.clone()]["status"] = json!("stopped");
-    let response =
-        services::sync_node(&app.db, &node, &json!({"state": stopped, "results": []})).expect("sync stopped");
+    let response = services::sync_node(&app.db, &node, &json!({"state": stopped, "results": []}))
+        .expect("sync stopped");
     assert!(response.routes.is_empty(), "stopped の経路は返さない");
     {
         let conn = app.db.lock();
         let updated = models::get_lease(&conn, &lease.id).unwrap().unwrap();
         assert_eq!(updated.status, "stopped");
         assert!(!updated.active);
-        assert!(models::routes_of_lease(&conn, &lease.id).unwrap().is_empty());
+        assert!(models::routes_of_lease(&conn, &lease.id)
+            .unwrap()
+            .is_empty());
     }
 
     // 停止済み貸出がスナップショットに無くても保持される（欠落は証拠にならない）。
     let mut empty_state = snapshot.clone();
     empty_state["leases"] = json!({});
-    let response =
-        services::sync_node(&app.db, &node, &json!({"state": empty_state, "results": []})).expect("sync empty");
+    let response = services::sync_node(
+        &app.db,
+        &node,
+        &json!({"state": empty_state, "results": []}),
+    )
+    .expect("sync empty");
     assert!(response.routes.is_empty());
 
     // 不正な state は Invalid payload / Invalid node snapshot。

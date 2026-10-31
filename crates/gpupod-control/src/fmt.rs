@@ -30,7 +30,8 @@ pub fn round_decimal(text: &str, decimals: usize) -> String {
         Some((head, tail)) => (head, tail),
         None => (body, ""),
     };
-    if int_part.is_empty() || !int_part.bytes().all(|byte| byte.is_ascii_digit())
+    if int_part.is_empty()
+        || !int_part.bytes().all(|byte| byte.is_ascii_digit())
         || !frac_part.bytes().all(|byte| byte.is_ascii_digit())
     {
         // inf / nan 等は Python 版と同じくそのまま返す。
@@ -48,7 +49,10 @@ pub fn round_decimal(text: &str, decimals: usize) -> String {
         };
     }
 
-    let mut fraction: Vec<u8> = frac_part.as_bytes()[..decimals].iter().map(|b| b - b'0').collect();
+    let mut fraction: Vec<u8> = frac_part.as_bytes()[..decimals]
+        .iter()
+        .map(|b| b - b'0')
+        .collect();
     let next_digit = frac_part.as_bytes()[decimals] - b'0';
     if next_digit >= 5 {
         let mut carry = 1u16;

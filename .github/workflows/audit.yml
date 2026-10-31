@@ -1,0 +1,57 @@
+name: Dependency audit
+
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - .cargo/audit.toml
+      - .github/workflows/audit.yml
+  schedule:
+    # 週次（月曜 09:00 JST = 月曜 00:00 UTC）
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-audit:
+    name: cargo audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit --version
+        run: cargo audit --version
+      - name: cargo audit
+        # 既知の勧告は .cargo/audit.toml の ignore で除外し、新規のみを失敗にします。
+        # ignore を追加するときは docs/security.md に理由と対応期限を書いてください。
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo audit 2>&1 | tee "$RUNNER_TEMP/audit.log"
+      - name: 勧告一覧をまとめる
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/audit.log" ]; then
+            {
+              echo "### cargo audit"
+              echo '~~~'
+              grep -E '^(Crate:|Version:|ID:|Title:|Severity:|error:|warning:)' "$RUNNER_TEMP/audit.log" | head -80 || true
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: audit-log
+          path: ${{ runner.temp }}/audit.log
+          retention-days: 14

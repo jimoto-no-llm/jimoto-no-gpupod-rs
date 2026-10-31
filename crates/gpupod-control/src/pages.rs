@@ -15,10 +15,10 @@ use crate::models::{self, LeaseRow};
 use crate::pyrepr::py_str;
 use crate::services::{self, ServiceError};
 use crate::web::{
-    self as web,
-    anon_page_response, benchmarks_view, check_csrf, error_page, flash_view, not_found_page, page_response,
-    redirect, require_user, resources_view, staff_identity, visible_lease, FlashView, LeaseDetailView,
-    LeaseRowView, NodeLeaseView, NodeView, OfferView, RouteView, TemplateOption, UserNav,
+    self as web, benchmarks_view, check_csrf, error_page, flash_view, not_found_page,
+    page_response, redirect, require_user, resources_view, staff_identity, visible_lease,
+    FlashView, LeaseDetailView, LeaseRowView, NodeLeaseView, NodeView, OfferView, RouteView,
+    TemplateOption, UserNav,
 };
 
 /// 利用パネル（dashboard.html）。
@@ -52,6 +52,28 @@ pub struct LoginPage {
     pub messages: Vec<FlashView>,
     pub form_html: String,
     pub next: String,
+    /// Discord ログインのボタンを表示するか。
+    pub discord_enabled: bool,
+}
+
+/// アカウント（account.html）。
+#[derive(Template)]
+#[template(path = "portal/account.html")]
+pub struct AccountPage {
+    pub user: UserNav,
+    pub csrf: String,
+    pub messages: Vec<FlashView>,
+    pub username: String,
+    pub display_name: String,
+    pub avatar_url: String,
+    pub has_avatar: bool,
+    pub email: String,
+    pub has_email: bool,
+    pub discord_enabled: bool,
+    pub discord_linked: bool,
+    pub discord_subject: String,
+    pub can_unlink: bool,
+    pub has_password: bool,
 }
 
 /// 提供PC管理（nodes.html）。
@@ -102,7 +124,12 @@ fn lease_row_view(conn: &rusqlite::Connection, lease: LeaseRow) -> LeaseRowView 
         .flatten()
         .map(|template| template.name)
         .unwrap_or_default();
-    LeaseRowView { pk: lease.uuid_str(), node_name, template_name, status: lease.status }
+    LeaseRowView {
+        pk: lease.uuid_str(),
+        node_name,
+        template_name,
+        status: lease.status,
+    }
 }
 
 /// GET / （dashboard）
@@ -111,20 +138,29 @@ pub async fn dashboard(State(app): State<Arc<crate::App>>, headers: HeaderMap) -
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
-    let csrf = session.data.csrf.clone();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
+    let csrf = web::csrf_input(&session.data.csrf);
     let now_text = fmt_dt(now());
 
     let (offers, leases) = {
         let conn = app.db.lock();
         let mut offers: Vec<OfferView> = Vec::new();
-        for node in models::list_nodes(&conn).unwrap_or_default().into_iter().filter(|node| node.enabled) {
+        for node in models::list_nodes(&conn)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|node| node.enabled)
+        {
             let capacity = services::node_resources(&conn, &node);
             let capacity_available = match &capacity {
                 Ok(None) => true,
                 Ok(Some(value)) => {
-                    value.available_memory_bytes >= gpupod_common::resources::minimum("memory_bytes")
-                        && value.available_disk_bytes >= gpupod_common::resources::minimum("disk_bytes")
+                    value.available_memory_bytes
+                        >= gpupod_common::resources::minimum("memory_bytes")
+                        && value.available_disk_bytes
+                            >= gpupod_common::resources::minimum("disk_bytes")
                 }
                 Err(_) => false,
             };
@@ -152,16 +188,28 @@ pub async fn dashboard(State(app): State<Arc<crate::App>>, headers: HeaderMap) -
                 };
                 let occupied = services::is_truthy(gpu.get("allocated"))
                     || models::active_lease_exists(&conn, &node.id, gpu_id).unwrap_or(false);
-                let available = accepting && !occupied && !templates.is_empty() && capacity_available;
+                let available =
+                    accepting && !occupied && !templates.is_empty() && capacity_available;
                 offers.push(OfferView {
                     node_pk: node.uuid_str(),
                     node_name: node.name.clone(),
                     node_online,
                     direct_host: !node.direct_host().is_empty(),
                     gpu_id: gpu_id.to_string(),
-                    gpu_name: gpu.get("name").and_then(|value| value.as_str()).unwrap_or("").to_string(),
-                    gpu_vendor: gpu.get("vendor").and_then(|value| value.as_str()).unwrap_or("").to_string(),
-                    gpu_memory_mib: gpu.get("memory_mib").and_then(|value| value.as_i64()).unwrap_or(0),
+                    gpu_name: gpu
+                        .get("name")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    gpu_vendor: gpu
+                        .get("vendor")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    gpu_memory_mib: gpu
+                        .get("memory_mib")
+                        .and_then(|value| value.as_i64())
+                        .unwrap_or(0),
                     gpu_allocated: occupied,
                     available,
                     capacity_available,
@@ -170,7 +218,10 @@ pub async fn dashboard(State(app): State<Arc<crate::App>>, headers: HeaderMap) -
                     benchmarks: node_benchmarks.clone(),
                     templates: templates
                         .into_iter()
-                        .map(|item| TemplateOption { id: item.id, name: item.name })
+                        .map(|item| TemplateOption {
+                            id: item.id,
+                            name: item.name,
+                        })
                         .collect(),
                 });
             }
@@ -184,7 +235,7 @@ pub async fn dashboard(State(app): State<Arc<crate::App>>, headers: HeaderMap) -
     };
 
     let page = DashboardPage {
-        user: web::user_nav(Some(&user)),
+        user: web::user_nav_profile(&app.db, Some(&user)),
         csrf,
         messages,
         offers,
@@ -213,11 +264,7 @@ pub async fn start(
         auth::push_message(&app.db, &session, "error", text);
     };
 
-    let (node, gpu, template) = match (
-        form.get("node"),
-        form.get("gpu"),
-        form.get("template"),
-    ) {
+    let (node, gpu, template) = match (form.get("node"), form.get("gpu"), form.get("template")) {
         (Some(node), Some(gpu), Some(template)) => (node.clone(), gpu.clone(), template.clone()),
         _ => {
             push_error(generic.to_string());
@@ -225,7 +272,10 @@ pub async fn start(
         }
     };
     let ssh_public_key = form.get("ssh_public_key").cloned().unwrap_or_default();
-    let connection_mode = form.get("connection_mode").cloned().unwrap_or_else(|| "relay".to_string());
+    let connection_mode = form
+        .get("connection_mode")
+        .cloned()
+        .unwrap_or_else(|| "relay".to_string());
 
     let memory_bytes = match form.get("memory_gib").filter(|value| !value.is_empty()) {
         None => Ok(None),
@@ -288,8 +338,11 @@ pub async fn lease_detail(
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
-    let csrf = session.data.csrf.clone();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
+    let csrf = web::csrf_input(&session.data.csrf);
     let Some(lease_hex) = models::uuid_to_hex(&lease_id) else {
         return not_found_page();
     };
@@ -301,8 +354,13 @@ pub async fn lease_detail(
     let (routes, detail) = {
         let conn = app.db.lock();
         let node = models::get_node(&conn, &lease.node_id).ok().flatten();
-        let template = models::get_template(&conn, &lease.template_id).ok().flatten();
-        let node_online = node.as_ref().map(|node| node.online(&now_text)).unwrap_or(false);
+        let template = models::get_template(&conn, &lease.template_id)
+            .ok()
+            .flatten();
+        let node_online = node
+            .as_ref()
+            .map(|node| node.online(&now_text))
+            .unwrap_or(false);
         let mut routes: Vec<RouteView> = Vec::new();
         for route in models::routes_of_lease(&conn, &lease.id).unwrap_or_default() {
             let command = if route.container_port == "22/tcp" {
@@ -310,7 +368,10 @@ pub async fn lease_detail(
             } else {
                 format!("{}:{}", app.cfg.relay_host, route.relay_port)
             };
-            routes.push(RouteView { port: route.container_port, command });
+            routes.push(RouteView {
+                port: route.container_port,
+                command,
+            });
         }
         if lease.connection_mode == "direct" {
             let node = node.clone();
@@ -330,7 +391,8 @@ pub async fn lease_detail(
                         None => continue,
                     };
                     for binding in items {
-                        let number = match binding.get("HostPort").and_then(|value| value.as_str()) {
+                        let number = match binding.get("HostPort").and_then(|value| value.as_str())
+                        {
                             Some(number) => number,
                             None => continue,
                         };
@@ -339,7 +401,10 @@ pub async fn lease_detail(
                         } else {
                             format!("{}:{}", host, number)
                         };
-                        routes.push(RouteView { port: port.clone(), command });
+                        routes.push(RouteView {
+                            port: port.clone(),
+                            command,
+                        });
                     }
                 }
             }
@@ -347,13 +412,20 @@ pub async fn lease_detail(
         let resources = lease.resources();
         let detail = LeaseDetailView {
             pk: lease.uuid_str(),
-            node_name: node.as_ref().map(|node| node.name.clone()).unwrap_or_default(),
+            node_name: node
+                .as_ref()
+                .map(|node| node.name.clone())
+                .unwrap_or_default(),
             node_online,
             template_name: template.map(|template| template.name).unwrap_or_default(),
             gpu_id: lease.gpu_id.clone(),
             has_resources: resources.is_some(),
-            memory_gib: resources.map(|(memory, _)| crate::fmt::floatformat(crate::fmt::gib(memory), 2)).unwrap_or_default(),
-            disk_gib: resources.map(|(_, disk)| crate::fmt::floatformat(crate::fmt::gib(disk), 2)).unwrap_or_default(),
+            memory_gib: resources
+                .map(|(memory, _)| crate::fmt::floatformat(crate::fmt::gib(memory), 2))
+                .unwrap_or_default(),
+            disk_gib: resources
+                .map(|(_, disk)| crate::fmt::floatformat(crate::fmt::gib(disk), 2))
+                .unwrap_or_default(),
             status: lease.status.clone(),
             has_error: !lease.error.is_empty(),
             error: lease.error.clone(),
@@ -368,7 +440,13 @@ pub async fn lease_detail(
         (routes, detail)
     };
 
-    let page = LeasePage { user: web::user_nav(Some(&user)), csrf, messages, lease: detail, routes };
+    let page = LeasePage {
+        user: web::user_nav_profile(&app.db, Some(&user)),
+        csrf,
+        messages,
+        lease: detail,
+        routes,
+    };
     let body = page.render().unwrap_or_default();
     page_response(&app, &session, &headers, body)
 }
@@ -414,8 +492,11 @@ pub async fn nodes(State(app): State<Arc<crate::App>>, headers: HeaderMap) -> Re
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
-    let csrf = session.data.csrf.clone();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
+    let csrf = web::csrf_input(&session.data.csrf);
     let now_text = fmt_dt(now());
 
     let (node_views, lease_views) = {
@@ -468,7 +549,7 @@ pub async fn nodes(State(app): State<Arc<crate::App>>, headers: HeaderMap) -> Re
     };
 
     let page = NodesPage {
-        user: web::user_nav(Some(&user)),
+        user: web::user_nav_profile(&app.db, Some(&user)),
         csrf,
         messages,
         nodes: node_views,
@@ -526,14 +607,29 @@ pub async fn node_enroll(
     if let Err(response) = check_csrf(&app, &headers, &form) {
         return response;
     }
-    let name = form.get("name").map(String::as_str).unwrap_or("").trim().to_string();
+    let name = form
+        .get("name")
+        .map(String::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if name.is_empty() {
-        auth::push_message(&app.db, &session, "error", "提供PCの名前を入力してください。");
+        auth::push_message(
+            &app.db,
+            &session,
+            "error",
+            "提供PCの名前を入力してください。",
+        );
         return redirect("/nodes/");
     }
     let key_path = app.cfg.host_key_path();
     if !key_path.exists() {
-        auth::push_message(&app.db, &session, "error", "先に init_control を実行してください。");
+        auth::push_message(
+            &app.db,
+            &session,
+            "error",
+            "先に init_control を実行してください。",
+        );
         return redirect("/nodes/");
     }
     let enrolled = {
@@ -545,7 +641,12 @@ pub async fn node_enroll(
         Err(exc) => return server_error(&exc.to_string()),
     };
     let public_key = match russh::keys::load_secret_key(&key_path, None) {
-        Ok(key) => key.public_key().to_openssh().unwrap_or_default().trim().to_string(),
+        Ok(key) => key
+            .public_key()
+            .to_openssh()
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
         Err(exc) => return server_error(&format!("relay host key: {exc}")),
     };
     let host = headers
@@ -564,18 +665,30 @@ pub async fn node_enroll(
     });
     let body = serde_json::to_string_pretty(&payload).unwrap_or_default();
     let mut response = Response::new(axum::body::Body::from(body));
-    response.headers_mut().insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
-    response.headers_mut().insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
-    let disposition =
-        format!("attachment; filename=\"node-{}.secret.json\"", node.uuid_str());
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    let disposition = format!(
+        "attachment; filename=\"node-{}.secret.json\"",
+        node.uuid_str()
+    );
     if let Ok(value) = disposition.parse() {
-        response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
+        response
+            .headers_mut()
+            .insert(header::CONTENT_DISPOSITION, value);
     }
     response
 }
 
 /// Django の AuthenticationForm.as_p 相当。
-fn login_form_html(username_error: Option<&str>, password_error: Option<&str>, nonfield: Option<&str>) -> String {
+fn login_form_html(
+    username_error: Option<&str>,
+    password_error: Option<&str>,
+    nonfield: Option<&str>,
+) -> String {
     let mut out = String::new();
     if let Some(message) = nonfield {
         out.push_str("<ul class=\"errorlist nonfield\"><li>");
@@ -603,6 +716,17 @@ fn login_form_html(username_error: Option<&str>, password_error: Option<&str>, n
     out
 }
 
+/// ログイン画面の CSRF トークン。
+///
+/// フォームに埋め込む値と Cookie に保存する値を必ず一致させ、
+/// ログイン済みならセッション固有のトークンに合わせる。
+fn login_csrf_token(app: &crate::App, headers: &HeaderMap) -> String {
+    match auth::load_session(&app.db, headers) {
+        Some(session) => session.data.csrf,
+        None => web::anonymous_csrf(app, headers),
+    }
+}
+
 /// GET /login/ （LoginView）
 pub async fn login_get(
     State(app): State<Arc<crate::App>>,
@@ -610,29 +734,33 @@ pub async fn login_get(
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
     let next = query.get("next").cloned().unwrap_or_default();
-    let csrf = web::anonymous_csrf(&app, &headers);
+    let csrf_token = login_csrf_token(&app, &headers);
+    let csrf = web::csrf_input(&csrf_token);
     let page = LoginPage {
         user: web::user_nav(None),
         csrf,
         messages: Vec::new(),
         form_html: login_form_html(None, None, None),
-        next: next.clone(),
+        next,
+        discord_enabled: app.cfg.discord_enabled(),
     };
     let body = page.render().unwrap_or_default();
-    let mut response = anon_page_response(&app, &headers, body);
-    if let Some(location) = safe_next(&next) {
-        let _ = location;
-    }
-    response
+    web::anon_page_response_with_token(&app, &headers, &csrf_token, body)
 }
 
-/// 遷移先の安全性（Django の url_has_allowed_host_and_scheme 相当・簡易版）。
-fn safe_next(next: &str) -> Option<String> {
-    if next.starts_with('/') && !next.starts_with("//") && !next.contains('\n') && !next.contains('\r') {
-        Some(next.to_string())
-    } else {
-        None
+/// 遷移先の安全性（Django の url_has_allowed_host_and_scheme 相当）。
+///
+/// 自サイトの絶対パスだけを許可する。プロトコル相対（//evil.example）と、
+/// ブラウザがスラッシュとして扱うバックスラッシュ（/\evil.example）、
+/// 改行・制御文字を含む値は拒否する。
+pub fn safe_next(next: &str) -> Option<String> {
+    if !next.starts_with('/') || next.starts_with("//") {
+        return None;
     }
+    if next.chars().any(|ch| ch.is_control() || ch == '\\') {
+        return None;
+    }
+    Some(next.to_string())
 }
 
 /// POST /login/ （LoginView）
@@ -659,13 +787,32 @@ pub async fn login_post(
     let mut nonfield = None;
     let mut logged_in = None;
     if username_error.is_none() && password_error.is_none() {
+        // 総当たり対策（IP + ユーザー名ごとの失敗回数）。
+        let throttle_key = auth::login_throttle_key(&headers, &app.cfg, &username);
+        if auth::throttle_blocked(
+            "login",
+            &throttle_key,
+            auth::LOGIN_MAX_FAILURES,
+            auth::LOGIN_FAILURE_WINDOW,
+        ) {
+            return web::too_many_requests_page();
+        }
         // 既存セッションは破棄してから新しい鍵を発行する（Django の cycle_key 相当）。
         if let Some(existing) = auth::load_session(&app.db, &headers) {
             auth::drop_session(&app.db, &existing.key);
         }
         match auth::login(&app.db, &username, &password) {
-            Some(session) => logged_in = Some(session),
+            Some(session) => {
+                auth::throttle_clear("login", &throttle_key);
+                logged_in = Some(session);
+            }
             None => {
+                auth::throttle_hit(
+                    "login",
+                    &throttle_key,
+                    auth::LOGIN_MAX_FAILURES,
+                    auth::LOGIN_FAILURE_WINDOW,
+                );
                 nonfield = Some(
                     "正しいユーザー名とパスワードを入力してください。どちらのフィールドも大文字と小文字は区別されます。",
                 );
@@ -681,16 +828,18 @@ pub async fn login_post(
         return response;
     }
 
-    let csrf = web::anonymous_csrf(&app, &headers);
+    let csrf_token = login_csrf_token(&app, &headers);
+    let csrf = web::csrf_input(&csrf_token);
     let page = LoginPage {
         user: web::user_nav(None),
         csrf,
         messages: Vec::new(),
         form_html: login_form_html(username_error, password_error, nonfield),
         next,
+        discord_enabled: app.cfg.discord_enabled(),
     };
     let body = page.render().unwrap_or_default();
-    anon_page_response(&app, &headers, body)
+    web::anon_page_response_with_token(&app, &headers, &csrf_token, body)
 }
 
 /// POST /logout/ （LogoutView）
@@ -706,6 +855,121 @@ pub async fn logout(
         auth::drop_session(&app.db, &session.key);
     }
     let mut response = redirect("/login/");
-    super::web::append_cookie(&mut response, auth::clear_session_cookie(!app.cfg.insecure_http));
+    super::web::append_cookie(
+        &mut response,
+        auth::clear_session_cookie(!app.cfg.insecure_http),
+    );
     response
+}
+
+/// アカウント画面を組み立てる。
+fn render_account(
+    app: &crate::App,
+    session: &auth::Session,
+    user: &models::UserRow,
+    headers: &HeaderMap,
+) -> Response {
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
+    let (profile, linked) = {
+        let conn = app.db.lock();
+        let profile = models::get_user_profile(&conn, user.id).ok().flatten();
+        let linked = models::find_oauth_identity_by_user(&conn, crate::oauth::PROVIDER, user.id)
+            .ok()
+            .flatten();
+        (profile, linked)
+    };
+    let display_name = profile
+        .as_ref()
+        .map(|item| item.display_name.clone())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| user.username.clone());
+    let avatar_url = profile
+        .as_ref()
+        .map(|item| item.avatar_url.clone())
+        .unwrap_or_default();
+    let has_password = auth::has_usable_password(&user.password);
+    let discord_subject = linked
+        .as_ref()
+        .map(|item| item.subject.clone())
+        .unwrap_or_default();
+    let page = AccountPage {
+        user: web::user_nav_profile(&app.db, Some(user)),
+        csrf: web::csrf_input(&session.data.csrf),
+        messages,
+        username: user.username.clone(),
+        display_name,
+        has_avatar: !avatar_url.is_empty(),
+        avatar_url,
+        email: user.email.clone(),
+        has_email: !user.email.is_empty(),
+        discord_enabled: app.cfg.discord_enabled(),
+        discord_linked: linked.is_some(),
+        discord_subject,
+        can_unlink: linked.is_some() && has_password,
+        has_password,
+    };
+    page_response(app, session, headers, page.render().unwrap_or_default())
+}
+
+/// GET /account/ （アカウント情報・連携・パスワード変更）。
+pub async fn account(State(app): State<Arc<crate::App>>, headers: HeaderMap) -> Response {
+    let (session, user) = match require_user(&app, &headers, "/account/") {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    render_account(&app, &session, &user, &headers)
+}
+
+/// POST /account/password/ （パスワード変更）。
+pub async fn password_change(
+    State(app): State<Arc<crate::App>>,
+    headers: HeaderMap,
+    Form(form): Form<HashMap<String, String>>,
+) -> Response {
+    let (session, user) = match require_user(&app, &headers, "/account/") {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if let Err(response) = check_csrf(&app, &headers, &form) {
+        return response;
+    }
+    let fail = |message: &str| {
+        auth::push_message(&app.db, &session, "error", message);
+        redirect("/account/")
+    };
+    if !auth::has_usable_password(&user.password) {
+        return fail("パスワードが設定されていません。管理者にお問い合わせください。");
+    }
+    let current = form.get("current_password").cloned().unwrap_or_default();
+    let new1 = form.get("new_password1").cloned().unwrap_or_default();
+    let new2 = form.get("new_password2").cloned().unwrap_or_default();
+    if !auth::verify_password(&current, &user.password) {
+        return fail("現在のパスワードが正しくありません。");
+    }
+    if new1.chars().count() < 8 {
+        return fail("新しいパスワードは 8 文字以上にしてください。");
+    }
+    if new1.chars().all(|ch| ch.is_ascii_digit()) {
+        return fail("新しいパスワードを数字だけにすることはできません。");
+    }
+    if new1 != new2 {
+        return fail("確認用のパスワードが一致しません。");
+    }
+    let encoded = auth::hash_password(&new1);
+    let updated = {
+        let conn = app.db.lock();
+        conn.execute(
+            "UPDATE auth_user SET password = ?2 WHERE id = ?1",
+            rusqlite::params![user.id, encoded],
+        )
+    };
+    if let Err(exc) = updated {
+        tracing::error!("パスワード変更に失敗しました: {exc}");
+        return fail("パスワードの変更に失敗しました。時間をおいて再度お試しください。");
+    }
+    auth::push_message(&app.db, &session, "success", "パスワードを変更しました。");
+    redirect("/account/")
 }

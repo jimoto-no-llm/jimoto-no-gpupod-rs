@@ -36,12 +36,10 @@ fn default_watchdog() -> f64 {
 
 /// Python 版 load_config と同じ規則で設定を検証する。
 pub fn load_provider_config(path: &Path) -> Result<ProviderConfig> {
-    let raw = std::fs::read_to_string(path).map_err(|exc| {
-        AgentError::new(format!("Invalid provider configuration: {exc}"))
-    })?;
-    let value: serde_json::Value = serde_json::from_str(&raw).map_err(|exc| {
-        AgentError::new(format!("Invalid provider configuration: {exc}"))
-    })?;
+    let raw = std::fs::read_to_string(path)
+        .map_err(|exc| AgentError::new(format!("Invalid provider configuration: {exc}")))?;
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|exc| AgentError::new(format!("Invalid provider configuration: {exc}")))?;
     parse_provider_config(&value)
 }
 
@@ -52,12 +50,16 @@ pub fn parse_provider_config(value: &serde_json::Value) -> Result<ProviderConfig
     let url = required(object, "url")?;
     let parts = urlsplit(&url);
     let local = parts.is_loopback_host();
-    if !scheme_allowed(&parts.scheme, local) || parts.username().is_some() || parts.password().is_some()
-        || !parts.query.is_empty() || !parts.fragment.is_empty()
+    if !scheme_allowed(&parts.scheme, local)
+        || parts.username().is_some()
+        || parts.password().is_some()
+        || !parts.query.is_empty()
+        || !parts.fragment.is_empty()
     {
         return Err(AgentError::new(
             "Central URL must use HTTPS (HTTP is allowed only for loopback demos)",
-        ).into());
+        )
+        .into());
     }
     let relay_host = required(object, "relay_host")?;
     let relay_host_key = required(object, "relay_host_key")?;
@@ -72,7 +74,9 @@ pub fn parse_provider_config(value: &serde_json::Value) -> Result<ProviderConfig
     }
     let mut limits = BTreeMap::new();
     if let Some(raw) = object.get("limits") {
-        let map = raw.as_object().ok_or_else(|| AgentError::new("Unknown resource budget"))?;
+        let map = raw
+            .as_object()
+            .ok_or_else(|| AgentError::new("Unknown resource budget"))?;
         for (key, item) in map {
             if !matches!(
                 key.as_str(),
@@ -81,12 +85,15 @@ pub fn parse_provider_config(value: &serde_json::Value) -> Result<ProviderConfig
                 return Err(AgentError::new("Unknown resource budget").into());
             }
             let number = item.as_i64().ok_or_else(|| {
-                AgentError::new("Resource budgets must be positive integers in bytes/nanocpus/count")
+                AgentError::new(
+                    "Resource budgets must be positive integers in bytes/nanocpus/count",
+                )
             })?;
             if number <= 0 {
                 return Err(AgentError::new(
                     "Resource budgets must be positive integers in bytes/nanocpus/count",
-                ).into());
+                )
+                .into());
             }
             limits.insert(key.clone(), number);
         }
@@ -107,7 +114,8 @@ pub fn parse_provider_config(value: &serde_json::Value) -> Result<ProviderConfig
             if text != "runc" && text != "runsc" {
                 return Err(AgentError::new(
                     "Invalid provider configuration: runtime must be runc or runsc",
-                ).into());
+                )
+                .into());
             }
             Some(text.to_string())
         }
@@ -116,12 +124,15 @@ pub fn parse_provider_config(value: &serde_json::Value) -> Result<ProviderConfig
         None => 180.0,
         Some(item) => {
             let number = item.as_f64().ok_or_else(|| {
-                AgentError::new("Invalid provider configuration: watchdog timeout must be at least 30 seconds")
+                AgentError::new(
+                    "Invalid provider configuration: watchdog timeout must be at least 30 seconds",
+                )
             })?;
             if number < 30.0 {
                 return Err(AgentError::new(
                     "Invalid provider configuration: watchdog timeout must be at least 30 seconds",
-                ).into());
+                )
+                .into());
             }
             number
         }

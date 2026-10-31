@@ -1,0 +1,84 @@
+# 中央サーバー + 提供エージェント（GPU はダミー）を 1 コマンドで起動するデモ構成。
+#
+#   ./scripts/compose.sh up -d          # 推奨（DOCKER_GID を自動設定）
+#   docker compose up -d                # 直接実行する場合
+#
+# 本番の VPS 構成は docs/deploy.md を参照してください。
+# このデモは HTTP（TLS なし）で 127.0.0.1 に公開するローカル検証用です。インターネットへ
+# そのまま公開しないでください。
+name: gpupod
+
+services:
+  control:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: gpupod:${GPUPOD_TAG:-local}
+    restart: unless-stopped
+    environment:
+      GPUPOD_CONTROL_STATE: /var/lib/gpupod/control
+      GPUPOD_BIND: 0.0.0.0:8000
+      GPUPOD_ALLOWED_HOSTS: ${GPUPOD_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # Web のポートを変える場合は CSRF の Origin も合わせて設定する
+      GPUPOD_CSRF_ORIGINS: ${GPUPOD_CSRF_ORIGINS:-http://localhost:8000}
+      GPUPOD_RELAY_HOST: ${GPUPOD_RELAY_HOST:-localhost}
+      GPUPOD_RELAY_PORT: "19000"
+      GPUPOD_RELAY_PORT_MIN: "19400"
+      GPUPOD_RELAY_PORT_MAX: "19499"
+      GPUPOD_INSECURE_HTTP: "1"
+      GPUPOD_TRUST_PROXY: "0"
+      GPUPOD_DISCORD_CLIENT_ID: ${GPUPOD_DISCORD_CLIENT_ID:-}
+      GPUPOD_DISCORD_CLIENT_SECRET: ${GPUPOD_DISCORD_CLIENT_SECRET:-}
+      GPUPOD_PUBLIC_BASE_URL: ${GPUPOD_PUBLIC_BASE_URL:-}
+      GPUPOD_DISCORD_GUILD_ID: ${GPUPOD_DISCORD_GUILD_ID:-1551195569429422202}
+      GPUPOD_DISCORD_INVITE_URL: ${GPUPOD_DISCORD_INVITE_URL:-}
+      # デモ用: 管理ユーザー自動作成（空なら作成しない）と提供PCの自動登録
+      GPUPOD_SUPERUSER_USERNAME: ${GPUPOD_SUPERUSER_USERNAME:-admin}
+      GPUPOD_SUPERUSER_PASSWORD: ${GPUPOD_SUPERUSER_PASSWORD:-}
+      GPUPOD_DEMO_PROVIDER: "1"
+      GPUPOD_DEMO_PROVIDER_URL: http://127.0.0.1:${GPUPOD_WEB_PORT:-8000}
+      GPUPOD_DEMO_PROVIDER_RELAY_HOST: 127.0.0.1
+      GPUPOD_DEMO_PROVIDER_RELAY_PORT: "19000"
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${GPUPOD_WEB_PORT:-8000}:8000"
+      - "19000:19000"
+      # 貸出ごとに割り当てる中継ポート（GPUPOD_RELAY_PORT_MIN/MAX と揃える）
+      - "19400-19499:19400-19499"
+    volumes:
+      - gpupod-state:/var/lib/gpupod
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+  provider:
+    image: gpupod:${GPUPOD_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      control:
+        condition: service_healthy
+    # 貸出コンテナはホストの Docker で動くため、ホストの 127.0.0.1 に公開された
+    # ポートへ到達できるよう host ネットワークを使います（Linux 推奨）。
+    network_mode: host
+    # Docker ソケットのグループ ID に合わせる（scripts/compose.sh が自動設定）
+    group_add:
+      - "${DOCKER_GID:-0}"
+    environment:
+      GPUPOD_AGENT_STATE: /var/lib/gpupod/provider
+      GPUPOD_PROVIDER_CONFIG: /var/lib/gpupod/provider/node.secret.json
+      GPUPOD_TEMPLATES: /opt/gpupod/examples/templates.json
+      GPUPOD_DOCKER_SOCKET: /var/run/docker.sock
+      GPUPOD_DEMO_MEMORY_GIB: ${GPUPOD_DEMO_MEMORY_GIB:-8}
+      GPUPOD_DEMO_DISK_GIB: ${GPUPOD_DEMO_DISK_GIB:-100}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - gpupod-state:/var/lib/gpupod
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    command: ["/usr/local/bin/gpupod-provider-entrypoint.sh"]
+
+volumes:
+  gpupod-state:

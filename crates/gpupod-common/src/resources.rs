@@ -125,11 +125,11 @@ impl Allocation {
 }
 
 /// 未停止の貸出の予約合計。require_all では欠落をエラーにする。
-pub fn used_resources(
-    leases: &[Option<Allocation>],
-    require_all: bool,
-) -> Result<Allocation> {
-    let mut used = Allocation { memory_bytes: 0, disk_bytes: 0 };
+pub fn used_resources(leases: &[Option<Allocation>], require_all: bool) -> Result<Allocation> {
+    let mut used = Allocation {
+        memory_bytes: 0,
+        disk_bytes: 0,
+    };
     for lease in leases {
         match lease {
             None => {
@@ -209,20 +209,36 @@ pub fn summary(
         }
     }
     let mut map = BTreeMap::new();
-    map.insert("memory_bytes".to_string(), serde_json::json!(pool.memory_bytes));
+    map.insert(
+        "memory_bytes".to_string(),
+        serde_json::json!(pool.memory_bytes),
+    );
     map.insert("disk_bytes".to_string(), serde_json::json!(pool.disk_bytes));
-    map.insert("default_memory_bytes".to_string(), serde_json::json!(pool.default_memory_bytes));
-    map.insert("default_disk_bytes".to_string(), serde_json::json!(pool.default_disk_bytes));
+    map.insert(
+        "default_memory_bytes".to_string(),
+        serde_json::json!(pool.default_memory_bytes),
+    );
+    map.insert(
+        "default_disk_bytes".to_string(),
+        serde_json::json!(pool.default_disk_bytes),
+    );
     map.insert(
         "allocated".to_string(),
         serde_json::json!({"memory_bytes": used.memory_bytes, "disk_bytes": used.disk_bytes}),
     );
     let mut available = serde_json::Map::new();
     for field in FIELDS {
-        let value = if accepting { pool.get_field(field) - used.get(field) } else { 0 };
+        let value = if accepting {
+            pool.get_field(field) - used.get(field)
+        } else {
+            0
+        };
         available.insert(field.to_string(), serde_json::json!(value));
     }
-    map.insert("available".to_string(), serde_json::Value::Object(available));
+    map.insert(
+        "available".to_string(),
+        serde_json::Value::Object(available),
+    );
     Ok(Some(map))
 }
 
@@ -254,12 +270,21 @@ mod tests {
         let none: Vec<Option<Allocation>> = vec![];
         let first = claim(Some(&pool), &none, None, None).unwrap().unwrap();
         assert_eq!(first.memory_bytes, 2 * GIB);
-        let second = claim(Some(&pool), &[Some(first)], None, None).unwrap().unwrap();
-        let third = claim(Some(&pool), &[Some(first), Some(second)], None, None).unwrap().unwrap();
-        // 4 x 2 GiB = 8 GiB で枠いっぱい。5つ目は失敗する。
-        let fourth = claim(Some(&pool), &[Some(first), Some(second), Some(third)], None, None)
+        let second = claim(Some(&pool), &[Some(first)], None, None)
             .unwrap()
             .unwrap();
+        let third = claim(Some(&pool), &[Some(first), Some(second)], None, None)
+            .unwrap()
+            .unwrap();
+        // 4 x 2 GiB = 8 GiB で枠いっぱい。5つ目は失敗する。
+        let fourth = claim(
+            Some(&pool),
+            &[Some(first), Some(second), Some(third)],
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap();
         assert!(claim(
             Some(&pool),
             &[Some(first), Some(second), Some(third), Some(fourth)],
@@ -279,7 +304,10 @@ mod tests {
             default_memory_bytes: 2 * GIB,
             default_disk_bytes: 25 * GIB,
         };
-        let leases = vec![Some(Allocation { memory_bytes: 2 * GIB, disk_bytes: 25 * GIB })];
+        let leases = vec![Some(Allocation {
+            memory_bytes: 2 * GIB,
+            disk_bytes: 25 * GIB,
+        })];
         let map = summary(Some(&pool), &leases, true).unwrap().unwrap();
         assert_eq!(map["available"]["memory_bytes"], 6 * GIB);
         let stopped = summary(Some(&pool), &leases, false).unwrap().unwrap();

@@ -19,7 +19,7 @@ use bollard::query_parameters::{
 };
 use bollard::Docker;
 use futures_util::StreamExt;
-use gpupod_common::{AgentError, GPU, Template};
+use gpupod_common::{AgentError, Template, GPU};
 use serde_json::{json, Value};
 
 use crate::agent::Lease;
@@ -37,11 +37,17 @@ pub struct DockerError {
 
 impl DockerError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into(), uncertain: false }
+        Self {
+            message: message.into(),
+            uncertain: false,
+        }
     }
 
     pub fn with_uncertain(message: impl Into<String>, uncertain: bool) -> Self {
-        Self { message: message.into(), uncertain }
+        Self {
+            message: message.into(),
+            uncertain,
+        }
     }
 }
 
@@ -111,15 +117,24 @@ pub struct BollardEngine {
 
 impl BollardEngine {
     pub fn new(options: EngineOptions) -> Result<Self, DockerError> {
-        if !matches!(options.runtime.as_deref(), None | Some("runc") | Some("runsc")) {
+        if !matches!(
+            options.runtime.as_deref(),
+            None | Some("runc") | Some("runsc")
+        ) {
             return Err(DockerError::new("Runtime must be runc or runsc"));
         }
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
             .build()
-            .map_err(|exc| DockerError::new(format!("Cannot connect to local Docker Engine: {exc}")))?;
-        Ok(Self { options, runtime, client: Mutex::new(None) })
+            .map_err(|exc| {
+                DockerError::new(format!("Cannot connect to local Docker Engine: {exc}"))
+            })?;
+        Ok(Self {
+            options,
+            runtime,
+            client: Mutex::new(None),
+        })
     }
 
     fn block_on<F: Future>(&self, future: F) -> F::Output {
@@ -139,8 +154,8 @@ impl BollardEngine {
         let docker = self.block_on(async move {
             let docker = Docker::connect_with_unix(&path, timeout, &bollard::API_DEFAULT_VERSION)
                 .map_err(|exc| {
-                    DockerError::new(format!("Cannot connect to local Docker Engine: {exc}"))
-                })?;
+                DockerError::new(format!("Cannot connect to local Docker Engine: {exc}"))
+            })?;
             docker.negotiate_version().await.map_err(|exc| {
                 DockerError::new(format!("Cannot connect to local Docker Engine: {exc}"))
             })
@@ -178,10 +193,15 @@ impl BollardEngine {
         }
         let direct = lease.mode() == "direct";
         if direct && self.options.direct_bind.is_none() {
-            return Err(DockerError::new("Direct connections are disabled by the provider"));
+            return Err(DockerError::new(
+                "Direct connections are disabled by the provider",
+            ));
         }
         let bind_host = if direct {
-            self.options.direct_bind.clone().unwrap_or_else(|| "127.0.0.1".into())
+            self.options
+                .direct_bind
+                .clone()
+                .unwrap_or_else(|| "127.0.0.1".into())
         } else {
             "127.0.0.1".to_owned()
         };
@@ -214,9 +234,11 @@ impl BollardEngine {
             }
         }
         match inspect_volume(docker, &lease.volume).await? {
-            Some(volume) => {
-                check_owner(volume.get("Labels").and_then(|v| v.as_object()), lease, node_id)?
-            }
+            Some(volume) => check_owner(
+                volume.get("Labels").and_then(|v| v.as_object()),
+                lease,
+                node_id,
+            )?,
             None => {
                 let request = VolumeCreateRequest {
                     name: Some(lease.volume.clone()),
@@ -239,7 +261,10 @@ impl BollardEngine {
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
-        environment.insert("GPUPOD_SSH_PUBLIC_KEY".to_owned(), lease.ssh_public_key.clone());
+        environment.insert(
+            "GPUPOD_SSH_PUBLIC_KEY".to_owned(),
+            lease.ssh_public_key.clone(),
+        );
 
         let mut host = HostConfig {
             binds: Some(vec![format!("{}:/workspace:rw", lease.volume)]),
@@ -331,7 +356,11 @@ impl BollardEngine {
         };
         let body = ContainerCreateBody {
             image: Some(template.image.clone()),
-            cmd: if command.is_empty() { None } else { Some(command) },
+            cmd: if command.is_empty() {
+                None
+            } else {
+                Some(command)
+            },
             env: Some(
                 environment
                     .iter()
@@ -371,14 +400,22 @@ impl BollardEngine {
                 lease,
                 node_id,
             )?;
-            let options = RemoveContainerOptions { force: true, v: true, link: false };
+            let options = RemoveContainerOptions {
+                force: true,
+                v: true,
+                link: false,
+            };
             docker
                 .remove_container(&lease.container, Some(options))
                 .await
                 .map_err(map_error)?;
         }
         if let Some(volume) = inspect_volume(docker, &lease.volume).await? {
-            check_owner(volume.get("Labels").and_then(|v| v.as_object()), lease, node_id)?;
+            check_owner(
+                volume.get("Labels").and_then(|v| v.as_object()),
+                lease,
+                node_id,
+            )?;
             let options: Option<RemoveVolumeOptions> = None;
             docker
                 .remove_volume(&lease.volume, options)
@@ -392,7 +429,10 @@ impl BollardEngine {
                     lease,
                     node_id,
                 )?;
-                docker.remove_network(network_name).await.map_err(map_error)?;
+                docker
+                    .remove_network(network_name)
+                    .await
+                    .map_err(map_error)?;
             }
         }
         Ok(())
@@ -414,7 +454,10 @@ impl DockerEngine for BollardEngine {
     fn start(&self, lease: &Lease) -> std::result::Result<(), DockerError> {
         let docker = self.client()?;
         self.block_on(async move {
-            if inspect_container(&docker, &lease.container).await?.is_none() {
+            if inspect_container(&docker, &lease.container)
+                .await?
+                .is_none()
+            {
                 return Err(DockerError::new("Container disappeared before start"));
             }
             docker
@@ -474,7 +517,10 @@ impl DockerEngine for BollardEngine {
                     lease,
                     node_id,
                 )?;
-                let options = StatsOptions { stream: false, one_shot: true };
+                let options = StatsOptions {
+                    stream: false,
+                    one_shot: true,
+                };
                 let mut stream = docker.stats(&lease.container, Some(options));
                 if let Some(item) = stream.next().await {
                     let stats = item.map_err(map_error)?;
@@ -557,7 +603,10 @@ async fn inspect_container(
 }
 
 /// ボリュームを JSON で引き、無ければ None。
-async fn inspect_volume(docker: &Docker, name: &str) -> std::result::Result<Option<Value>, DockerError> {
+async fn inspect_volume(
+    docker: &Docker,
+    name: &str,
+) -> std::result::Result<Option<Value>, DockerError> {
     match docker.inspect_volume(name).await {
         Ok(volume) => serde_json::to_value(&volume)
             .map(Some)
@@ -582,15 +631,22 @@ async fn inspect_network(
 }
 
 fn is_missing(exc: &BollardError) -> bool {
-    matches!(exc, BollardError::DockerResponseServerError { status_code: 404, .. })
+    matches!(
+        exc,
+        BollardError::DockerResponseServerError {
+            status_code: 404,
+            ..
+        }
+    )
 }
 
 /// Python 版 _call の例外分類をなぞる。
 fn map_error(exc: BollardError) -> DockerError {
     match exc {
-        BollardError::DockerResponseServerError { status_code, ref message } => {
-            DockerError::with_uncertain(message.clone(), status_code >= 500)
-        }
+        BollardError::DockerResponseServerError {
+            status_code,
+            ref message,
+        } => DockerError::with_uncertain(message.clone(), status_code >= 500),
         BollardError::RequestTimeoutError => DockerError::with_uncertain(
             "Docker timed out; reservation retained until reconciliation",
             true,

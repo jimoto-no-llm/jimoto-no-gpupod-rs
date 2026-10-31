@@ -38,7 +38,6 @@ fn default_state_round_trips_and_locks() {
         assert!(guard.manual_enabled);
         assert_eq!(guard.node_id, node_id);
     }
-
 }
 
 #[test]

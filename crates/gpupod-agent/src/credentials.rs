@@ -47,8 +47,7 @@ fn http_client() -> Result<reqwest::blocking::Client> {
 }
 
 fn read_json(path: &Path) -> Result<Value> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|exc| AgentError::new(format!("{exc}")))?;
+    let text = std::fs::read_to_string(path).map_err(|exc| AgentError::new(format!("{exc}")))?;
     serde_json::from_str(&text).map_err(|exc| AgentError::new(format!("{exc}")))
 }
 
@@ -57,7 +56,10 @@ fn read_json(path: &Path) -> Result<Value> {
 /// 失敗しても pending ファイルに残った候補を先に再送し、
 /// 応答が失われた交換は同じ候補で回復する。
 pub fn rotate_credentials(config_path: impl AsRef<Path>) -> Result<Value> {
-    let config_path = config_path.as_ref().canonicalize().unwrap_or_else(|_| config_path.as_ref().to_path_buf());
+    let config_path = config_path
+        .as_ref()
+        .canonicalize()
+        .unwrap_or_else(|_| config_path.as_ref().to_path_buf());
     let pending_path = PathBuf::from(format!("{}.rotation.secret.json", config_path.display()));
     let _lock = lock_config(&config_path)?;
     let mut config = read_json(&config_path)?;
@@ -83,8 +85,14 @@ pub fn rotate_credentials(config_path: impl AsRef<Path>) -> Result<Value> {
         .to_owned();
     let base = format!(
         "{}/api/nodes/{}/token",
-        config.get("url").and_then(|v| v.as_str()).unwrap_or_default(),
-        config.get("node_id").and_then(|v| v.as_str()).unwrap_or_default(),
+        config
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        config
+            .get("node_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
     );
     let client = http_client()?;
     let candidate = json!({ "id": pending_id });
@@ -160,9 +168,12 @@ pub fn rotate_credentials(config_path: impl AsRef<Path>) -> Result<Value> {
 }
 
 /// secrets.token_urlsafe(48) 相当（64 文字の URL 安全な文字列）。
+///
+/// 機材キーの候補なので OS の乱数源から取る。
 fn random_token(bytes: usize) -> String {
     use base64::Engine;
+    use rand::RngCore;
     let mut buffer = vec![0u8; bytes];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut buffer);
+    rand::rngs::OsRng.fill_bytes(&mut buffer);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(buffer)
 }

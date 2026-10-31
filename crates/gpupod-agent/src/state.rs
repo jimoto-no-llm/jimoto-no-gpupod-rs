@@ -67,7 +67,9 @@ impl AgentState {
 const INVALID_STATE: &str = "Unsupported or invalid state; existing reservations retained";
 
 fn wrap_state(exc: impl std::fmt::Display) -> AgentError {
-    AgentError::new(format!("Cannot read or save state; existing reservations retained: {exc}"))
+    AgentError::new(format!(
+        "Cannot read or save state; existing reservations retained: {exc}"
+    ))
 }
 
 /// 提供ノード 1 台分の状態保存庫。
@@ -82,8 +84,7 @@ impl StateStore {
     /// 状態ディレクトリを 0700 で用意する。
     pub fn new(directory: impl AsRef<Path>) -> Result<Self> {
         let directory = directory.as_ref().to_path_buf();
-        std::fs::create_dir_all(&directory)
-            .map_err(|exc| AgentError::new(format!("{exc}")))?;
+        std::fs::create_dir_all(&directory).map_err(|exc| AgentError::new(format!("{exc}")))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -91,7 +92,11 @@ impl StateStore {
         }
         let path = directory.join("state.sqlite3");
         let lock_path = directory.join("state.lock");
-        Ok(Self { directory, path, lock_path })
+        Ok(Self {
+            directory,
+            path,
+            lock_path,
+        })
     }
 
     /// Python 版 StateStore.operation：貸出ごとのロックを試行する。
@@ -137,7 +142,11 @@ impl StateStore {
             ));
         }
         let state = self.read()?;
-        Ok(StateGuard { store: self, _file: file, state })
+        Ok(StateGuard {
+            store: self,
+            _file: file,
+            state,
+        })
     }
 
     /// ペイロードを読み、v1 妥当性を確かめる。行がなければ既定値を作る。
@@ -157,14 +166,26 @@ impl StateStore {
             .ok_or_else(|| AgentError::new(INVALID_STATE))?;
         let version_ok = object.get("version").and_then(|v| v.as_u64()) == Some(1);
         let leases_ok = object.get("leases").map(|v| v.is_object()).unwrap_or(false);
-        let node_ok = object.get("node_id").map(|v| v.is_string()).unwrap_or(false);
-        let manual_ok = object.get("manual_enabled").map(|v| v.is_boolean()).unwrap_or(false);
-        let busy_ok = object.get("auto_busy").map(|v| v.is_boolean()).unwrap_or(false);
+        let node_ok = object
+            .get("node_id")
+            .map(|v| v.is_string())
+            .unwrap_or(false);
+        let manual_ok = object
+            .get("manual_enabled")
+            .map(|v| v.is_boolean())
+            .unwrap_or(false);
+        let busy_ok = object
+            .get("auto_busy")
+            .map(|v| v.is_boolean())
+            .unwrap_or(false);
         if !(version_ok && leases_ok && node_ok && manual_ok && busy_ok) {
             return Err(AgentError::new(INVALID_STATE));
         }
-        let state: AgentState = serde_json::from_value(value).map_err(|_| AgentError::new(INVALID_STATE))?;
-        state.validate().map_err(|_| AgentError::new(INVALID_STATE))?;
+        let state: AgentState =
+            serde_json::from_value(value).map_err(|_| AgentError::new(INVALID_STATE))?;
+        state
+            .validate()
+            .map_err(|_| AgentError::new(INVALID_STATE))?;
         Ok(state)
     }
 
@@ -186,8 +207,7 @@ impl StateStore {
 
     /// 状態を 1 行に保存する。
     pub fn save(&self, state: &AgentState) -> Result<()> {
-        let payload = serde_json::to_string(state)
-            .map_err(|exc| wrap_state(exc))?;
+        let payload = serde_json::to_string(state).map_err(|exc| wrap_state(exc))?;
         let connection = self.connection().map_err(wrap_state)?;
         connection
             .execute(
@@ -201,8 +221,8 @@ impl StateStore {
 
     /// 接続を作ってスキーマを用意する（Python 版 _connection 相当）。
     fn connection(&self) -> std::result::Result<Connection, AgentError> {
-        let connection = Connection::open(&self.path)
-            .map_err(|exc| AgentError::new(format!("{exc}")))?;
+        let connection =
+            Connection::open(&self.path).map_err(|exc| AgentError::new(format!("{exc}")))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

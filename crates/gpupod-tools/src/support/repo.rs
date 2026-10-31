@@ -15,9 +15,7 @@ pub fn repo_root() -> Result<PathBuf> {
             return Ok(candidate.to_path_buf());
         }
     }
-    bail!(
-        "Cannot find the repository root; run from the gpupod checkout or set GPUPOD_REPO_ROOT"
-    )
+    bail!("Cannot find the repository root; run from the gpupod checkout or set GPUPOD_REPO_ROOT")
 }
 
 /// リリース識別。GPUPOD_RELEASE_JSON か release.json を優先し、なければ development。
@@ -43,7 +41,10 @@ pub fn valid_service_name(name: &str) -> bool {
     let Some(role) = rest.strip_prefix("gpupod-") else {
         return false;
     };
-    !role.is_empty() && role.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    !role.is_empty()
+        && role
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 pub fn ensure_dir(path: &Path) -> Result<()> {

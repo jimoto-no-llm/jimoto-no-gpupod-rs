@@ -6,9 +6,9 @@ use crate::error::{AgentError, Result};
 pub fn identifier(value: &str) -> Result<&str> {
     let bytes = value.as_bytes();
     let valid_first = bytes.first().is_some_and(|b| b.is_ascii_alphanumeric());
-    let valid_rest = bytes.iter().all(|b| {
-        b.is_ascii_alphanumeric() || matches!(b, b':' | b'_' | b'.' | b'-')
-    });
+    let valid_rest = bytes
+        .iter()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'_' | b'.' | b'-'));
     if !valid_first || !valid_rest || value.is_empty() || value.len() > 128 {
         return Err(AgentError::new("Invalid identifier"));
     }

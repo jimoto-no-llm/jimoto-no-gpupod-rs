@@ -28,9 +28,10 @@ impl GPU {
         }
         if self.backend == "nvidia" {
             let ok = !self.selector.is_empty()
-                && self.selector.bytes().all(|b| {
-                    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-')
-                });
+                && self
+                    .selector
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-'));
             if !ok {
                 return Err(AgentError::new("NVIDIA GPU selector is required"));
             }

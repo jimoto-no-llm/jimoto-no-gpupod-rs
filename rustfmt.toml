@@ -1,0 +1,7 @@
+# rustfmt の設定。cargo fmt --all の結果をCIで検査します。
+# 既存コードには rustfmt 未適用の箇所があるため、適用が済むまで CI の fmt ジョブは
+# 注意扱いです（docs/development.md の「CI の現状」を参照）。
+edition = "2021"
+newline_style = "Unix"
+hard_tabs = false
+tab_spaces = 4

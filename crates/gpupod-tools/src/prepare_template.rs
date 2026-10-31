@@ -56,9 +56,13 @@ mod tests {
         )
         .unwrap();
         // ソケットが無ければ Docker 接続エラーになる（テンプレート検証は通る）。
-        let error = run("ubuntu-24.04", &catalog, Path::new("/nonexistent/docker.sock"))
-            .unwrap_err()
-            .to_string();
+        let error = run(
+            "ubuntu-24.04",
+            &catalog,
+            Path::new("/nonexistent/docker.sock"),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(!error.contains("Unknown template ID"), "{error}");
     }
 }

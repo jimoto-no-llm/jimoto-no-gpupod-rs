@@ -28,7 +28,13 @@ pub fn urlsplit(value: &str) -> SplitUrl {
             Some(slash) => (&rest[..slash], rest[slash..].to_string()),
             None => (rest, String::new()),
         };
-        return SplitUrl { scheme, netloc: netloc.to_string(), path, query, fragment };
+        return SplitUrl {
+            scheme,
+            netloc: netloc.to_string(),
+            path,
+            query,
+            fragment,
+        };
     }
     SplitUrl {
         scheme: String::new(),
@@ -42,7 +48,11 @@ pub fn urlsplit(value: &str) -> SplitUrl {
 impl SplitUrl {
     /// userinfo を除き、ホスト名を小文字で返す（Python の .hostname 同様）。
     pub fn hostname(&self) -> Option<String> {
-        let host = self.netloc.rsplit_once('@').map(|(_, host)| host).unwrap_or(&self.netloc);
+        let host = self
+            .netloc
+            .rsplit_once('@')
+            .map(|(_, host)| host)
+            .unwrap_or(&self.netloc);
         let host = match host.rsplit_once(':') {
             Some((head, tail)) if head.contains(']') || !tail.bytes().any(|b| b == b']') => {
                 // IPv6 リテラル ([::1]:443) は最後の ':' で区切る。数字でない port は除去対象外。
@@ -63,16 +73,24 @@ impl SplitUrl {
     }
 
     pub fn username(&self) -> Option<&str> {
-        self.netloc.split_once('@').map(|(user, _)| user.split(':').next().unwrap_or(user))
+        self.netloc
+            .split_once('@')
+            .map(|(user, _)| user.split(':').next().unwrap_or(user))
     }
 
     pub fn password(&self) -> Option<&str> {
-        self.netloc.split_once('@').and_then(|(user, _)| user.split_once(':').map(|(_, pass)| pass))
+        self.netloc
+            .split_once('@')
+            .and_then(|(user, _)| user.split_once(':').map(|(_, pass)| pass))
     }
 
     /// 範囲外・非数値の port は Python 同様エラーにする。
     pub fn port(&self) -> Result<Option<u16>> {
-        let host = self.netloc.rsplit_once('@').map(|(_, host)| host).unwrap_or(&self.netloc);
+        let host = self
+            .netloc
+            .rsplit_once('@')
+            .map(|(_, host)| host)
+            .unwrap_or(&self.netloc);
         let candidate = match host.strip_prefix('[') {
             Some(rest) => match rest.split_once("]:") {
                 Some((_, port)) => Some(port),

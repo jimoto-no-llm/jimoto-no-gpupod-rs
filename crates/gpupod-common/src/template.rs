@@ -57,11 +57,9 @@ impl Template {
                 Some(serde_json::Value::Array(items)) => items
                     .iter()
                     .map(|item| {
-                        item.as_str()
-                            .map(str::to_owned)
-                            .ok_or_else(|| {
-                                AgentError::new("Template vendors must be a nonempty list")
-                            })
+                        item.as_str().map(str::to_owned).ok_or_else(|| {
+                            AgentError::new("Template vendors must be a nonempty list")
+                        })
                     })
                     .collect(),
                 _ => Err(AgentError::new("Template vendors must be a nonempty list")),
@@ -114,7 +112,14 @@ impl Template {
                 ));
             }
         }
-        Ok(Template { id: template_id, image, vendors, command, environment, ports })
+        Ok(Template {
+            id: template_id,
+            image,
+            vendors,
+            command,
+            environment,
+            ports,
+        })
     }
 
     /// Python 版 to_dict と同じ形（環境はマップ）。

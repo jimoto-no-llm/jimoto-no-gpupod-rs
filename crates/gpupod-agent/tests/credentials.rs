@@ -70,7 +70,11 @@ fn handle(mut stream: TcpStream, seen: Arc<Mutex<Seen>>) -> std::io::Result<()> 
         body.extend_from_slice(&chunk[..read]);
     }
     let request_line = head.lines().next().unwrap_or_default().to_owned();
-    let path = request_line.split_whitespace().nth(1).unwrap_or_default().to_owned();
+    let path = request_line
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_default()
+        .to_owned();
     let authorization = head
         .lines()
         .find_map(|line| {
@@ -97,7 +101,12 @@ fn handle(mut stream: TcpStream, seen: Arc<Mutex<Seen>>) -> std::io::Result<()> 
         } else if state.prepared {
             let id = serde_json::from_str::<Value>(&body)
                 .ok()
-                .and_then(|value| value.get("id").and_then(|id| id.as_str()).map(str::to_owned))
+                .and_then(|value| {
+                    value
+                        .get("id")
+                        .and_then(|id| id.as_str())
+                        .map(str::to_owned)
+                })
                 .unwrap_or_default();
             ("200 OK", format!("{{\"id\": \"{id}\"}}"))
         } else {
@@ -155,7 +164,11 @@ fn prepared_pending_is_committed_and_stored() {
     assert!(!pending_path.exists());
 
     let seen = seen.lock().expect("seen");
-    let paths: Vec<&str> = seen.requests.iter().map(|item| item.path.as_str()).collect();
+    let paths: Vec<&str> = seen
+        .requests
+        .iter()
+        .map(|item| item.path.as_str())
+        .collect();
     assert_eq!(paths.len(), 3);
     assert!(paths[0].ends_with("/commit/"));
     assert!(paths[1].ends_with("/prepare/"));
@@ -164,8 +177,7 @@ fn prepared_pending_is_committed_and_stored() {
     assert_eq!(seen.requests[0].authorization, "Bearer candidate-token");
     assert_eq!(seen.requests[1].authorization, "Bearer old-token");
     assert_eq!(seen.requests[2].authorization, "Bearer candidate-token");
-    let prepared: Value =
-        serde_json::from_str(&seen.requests[1].body).expect("prepare body");
+    let prepared: Value = serde_json::from_str(&seen.requests[1].body).expect("prepare body");
     assert_eq!(prepared["id"], "rotation-1");
     assert_eq!(prepared["token"], "candidate-token");
 }

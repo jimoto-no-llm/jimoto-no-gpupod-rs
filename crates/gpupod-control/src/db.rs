@@ -109,6 +109,33 @@ CREATE TABLE IF NOT EXISTS portal_agentrelease (
     rollout_percent smallint unsigned NOT NULL,
     enabled bool NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS portal_oauth_identity (
+    provider varchar(32) NOT NULL,
+    subject varchar(64) NOT NULL,
+    user_id integer NOT NULL REFERENCES auth_user (id) ON DELETE CASCADE,
+    created_at datetime NOT NULL,
+    PRIMARY KEY (provider, subject)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_oauth_identity_per_user ON portal_oauth_identity (provider, user_id);
+
+CREATE TABLE IF NOT EXISTS portal_userprofile (
+    user_id integer NOT NULL PRIMARY KEY REFERENCES auth_user (id) ON DELETE CASCADE,
+    display_name varchar(150) NOT NULL,
+    avatar_url varchar(200) NOT NULL,
+    updated_at datetime NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS portal_oauth_state (
+    state varchar(64) NOT NULL PRIMARY KEY,
+    code_verifier varchar(128) NOT NULL,
+    link_user_id integer NULL REFERENCES auth_user (id) ON DELETE CASCADE,
+    expires_at datetime NOT NULL,
+    created_at datetime NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS portal_oauth_state_expires_at ON portal_oauth_state (expires_at);
 "#;
 
 pub struct Db {
@@ -124,7 +151,9 @@ impl Db {
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.pragma_update(None, "foreign_keys", true)?;
         conn.busy_timeout(Duration::from_secs(30))?;
-        Ok(Db { conn: Mutex::new(conn) })
+        Ok(Db {
+            conn: Mutex::new(conn),
+        })
     }
 
     /// メモリ上の一時 DB（テスト用）。
@@ -132,7 +161,9 @@ impl Db {
         let conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "foreign_keys", true)?;
         conn.busy_timeout(Duration::from_secs(30))?;
-        Ok(Db { conn: Mutex::new(conn) })
+        Ok(Db {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub fn lock(&self) -> MutexGuard<'_, Connection> {
@@ -166,7 +197,9 @@ pub fn fmt_dt(value: DateTime<Utc>) -> String {
 /// 上記形式の読み込み。
 pub fn parse_dt(value: &str) -> Option<DateTime<Utc>> {
     let naive = if let Some((head, fraction)) = value.split_once('.') {
-        let micros: u32 = format!("{:0<6}", &fraction[..fraction.len().min(6)]).parse().ok()?;
+        let micros: u32 = format!("{:0<6}", &fraction[..fraction.len().min(6)])
+            .parse()
+            .ok()?;
         let head = NaiveDateTime::parse_from_str(head, "%Y-%m-%d %H:%M:%S").ok()?;
         head + chrono::Duration::microseconds(micros as i64)
     } else {

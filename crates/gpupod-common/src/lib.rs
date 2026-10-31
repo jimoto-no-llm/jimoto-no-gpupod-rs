@@ -6,10 +6,10 @@
 pub mod error;
 pub mod gpu;
 pub mod identifier;
+pub mod protocol;
 pub mod resources;
 pub mod template;
 pub mod token;
-pub mod protocol;
 
 pub use error::AgentError;
 pub use gpu::GPU;

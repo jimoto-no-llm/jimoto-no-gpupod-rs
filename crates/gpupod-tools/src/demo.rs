@@ -54,6 +54,12 @@ fn start_in_process(state: &std::path::Path, options: &Options) -> Result<()> {
         relay_bind_host: "127.0.0.1".to_string(),
         trust_proxy: false,
         insecure_http: true,
+        discord_client_id: None,
+        discord_client_secret: None,
+        public_base_url: Some(format!("http://127.0.0.1:{}", options.port)),
+        discord_guild_id: None,
+        discord_allowed_role_ids: Vec::new(),
+        discord_invite_url: None,
     };
     let app = App::new(control)?;
     let (node, token) = {
@@ -79,13 +85,14 @@ fn start_in_process(state: &std::path::Path, options: &Options) -> Result<()> {
     };
     let credentials_path = state.join("provider.secret.json");
     crate::support::files::atomic_json(&credentials_path, &serde_json::to_value(&credentials)?)?;
-    let templates =
-        gpupod_common::load_templates(crate::prepare_template::default_catalog(None))?;
+    let templates = gpupod_common::load_templates(crate::prepare_template::default_catalog(None))?;
     let store = Arc::new(StateStore::new(state.join("provider"))?);
-    let engine_options = EngineOptions { mock_gpu: true, ..Default::default() };
-    let engine = Arc::new(
-        BollardEngine::new(engine_options).map_err(|exc| anyhow::anyhow!("{exc}"))?,
-    );
+    let engine_options = EngineOptions {
+        mock_gpu: true,
+        ..Default::default()
+    };
+    let engine =
+        Arc::new(BollardEngine::new(engine_options).map_err(|exc| anyhow::anyhow!("{exc}"))?);
     let agent = Arc::new(Agent::new(store, engine, templates, mock_gpus()));
     let daemon = Arc::new(
         ProviderDaemon::new(agent, credentials, true, 5.0, Some(credentials_path))
@@ -126,9 +133,7 @@ fn start_in_process(state: &std::path::Path, options: &Options) -> Result<()> {
 
 #[cfg(not(feature = "full-stack"))]
 fn start_in_process(_state: &std::path::Path, _options: &Options) -> Result<()> {
-    bail!(
-        "demo requires the full-stack feature: build with --features full-stack"
-    )
+    bail!("demo requires the full-stack feature: build with --features full-stack")
 }
 
 #[cfg(test)]

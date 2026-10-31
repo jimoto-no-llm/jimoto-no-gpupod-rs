@@ -1,0 +1,53 @@
+name: 機能要望
+description: こういう使い方をしたい、この機能がほしい
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        要望ありがとうございます。このプロジェクトは「イベントで配れる GPU 貸出」を目標にしています。
+        実装の前に、利用場面と制約を確認させてください。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい課題
+      description: 誰が、いつ、何に困っているか
+      placeholder: イベント受付の混雑時に、管理者が空き GPU を一覧で把握できない
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案する内容
+      description: 画面、API、CLI のどれに何を足すかを書いてください
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 検討した代替案
+      description: 既存機能や運用で回避できる方法があれば
+  - type: dropdown
+    id: area
+    attributes:
+      label: 対象
+      multiple: true
+      options:
+        - 利用者向け画面
+        - 管理者向け画面
+        - 提供PCエージェント
+        - 中継・接続方式
+        - 運用手順・ドキュメント
+        - CI・リポジトリ整備
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: このプロジェクトの前提
+      options:
+        - label: 課金は行わない方針を理解している
+          required: true
+        - label: 任意のイメージ・ホストマウント・Docker オプションを許可しない方針を理解している
+          required: true

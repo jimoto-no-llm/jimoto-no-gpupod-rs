@@ -1,0 +1,15 @@
+# cargo-audit の設定（.github/workflows/audit.yml から使用）。
+#
+# ignore は「既知だが、このリポジトリでは今すぐ直せない」勧告だけに限定します。
+# 追加したときは docs/security.md の「既知の依存脆弱性」へ理由と対応期限を書いてください。
+# 依存の更新で解消したら、この一覧から削除します。
+[advisories]
+ignore = [
+  # russh / russh-cryptovec: 0.60.3 以上へ更新すれば解消。ワークスペース依存の更新が必要。
+  "RUSTSEC-2026-0154",
+  "RUSTSEC-2026-0153",
+  # rsa: 修正版が未提供。russh 更新で依存から外れる見込み。
+  "RUSTSEC-2023-0071",
+  # crypto-bigint: rsa 経由の推移依存。rsa の更新待ち。
+  "RUSTSEC-2026-0387",
+]

@@ -44,7 +44,10 @@ pub fn iteration(
         None => agent.external_activity(),
     };
     let busy = policy.update(activity, now);
-    Ok((serde_json::json!({"external_activity": activity, "auto_busy": busy}), busy))
+    Ok((
+        serde_json::json!({"external_activity": activity, "auto_busy": busy}),
+        busy,
+    ))
 }
 
 /// 対話なしで繰り返す本体。
@@ -70,7 +73,12 @@ pub fn run(options: &Options) -> Result<i32> {
     let mut policy = IdlePolicy::new(options.idle_seconds);
     let start = Instant::now();
     loop {
-        let (payload, busy) = iteration(&agent, &mut policy, options.signal_file.as_ref(), start.elapsed().as_secs_f64())?;
+        let (payload, busy) = iteration(
+            &agent,
+            &mut policy,
+            options.signal_file.as_ref(),
+            start.elapsed().as_secs_f64(),
+        )?;
         let snapshot = agent.status()?;
         if snapshot.auto_busy != busy {
             agent.set_auto_busy(busy, &options.mode)?;

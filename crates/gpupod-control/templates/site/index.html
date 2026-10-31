@@ -1,0 +1,181 @@
+{% extends "site/base.html" %}
+{% block title %}地域のGPUを時間で貸し出します — Jimoto GPU Pod{% endblock %}
+{% block description %}提供者のPCがあいている時間だけ、承認済みのコンテナを貸し出します。接続は中央の中継経由。料金はかかりません。{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <h1 class="hero-title">地域のGPUを、<br>時間で貸し出します</h1>
+      <p class="hero-lead">提供者のPCが空いているあいだ、承認済みのコンテナを動かせます。接続は中央サーバーの中継を経由し、提供PCのIPアドレスは公開しません。利用料金はかかりません。</p>
+      <div class="hero-actions">
+        {% if ctx.has_invite %}
+        <a class="btn btn-primary" href="{{ ctx.invite_url }}" target="_blank" rel="noopener noreferrer">Discord に参加する</a>
+        {% else %}
+        <a class="btn btn-primary" href="/how/">参加手順を見る</a>
+        {% endif %}
+        <a class="btn btn-ghost" href="/how/">借り方を見る</a>
+      </div>
+      <p class="hero-note">利用には Discord サーバーへの参加が必要です。参加は無料で、どなたでも可能です。</p>
+    </div>
+
+    <div class="hero-aside">
+      <section class="board" aria-label="いまの在庫">
+        <div class="board-head">
+          <span class="board-title">いまの在庫</span>
+          <span class="board-meta">{{ stats.providers }}台の提供PC</span>
+        </div>
+        {% if has_gpus %}
+        <table class="board-table">
+          <thead>
+            <tr><th scope="col">GPU</th><th scope="col">VRAM</th><th scope="col">提供者</th><th scope="col">状態</th></tr>
+          </thead>
+          <tbody>
+            {% for gpu in gpus %}
+            <tr>
+              <td class="board-gpu">{{ gpu.name }}<span class="board-vendor">{{ gpu.vendor_label }}</span></td>
+              <td class="board-num">{{ gpu.vram }}</td>
+              <td class="board-provider">{{ gpu.provider }}</td>
+              <td><span class="tag {% if gpu.available %}tag-free{% else %}tag-busy{% endif %}">{{ gpu.status }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="board-empty">
+          <p class="board-empty-title">いま貸し出せるGPUはありません</p>
+          <p class="board-empty-note">提供PCが登録され、受付を開始するとここに並びます。</p>
+        </div>
+        {% endif %}
+        <p class="board-foot">表示はアクセス時点のスナップショットです。IPアドレスと内部IDは公開しません。</p>
+      </section>
+    </div>
+  </div>
+</section>
+
+<p class="statusline container">
+  <span>提供PC <b>{{ stats.providers }}</b> 台</span>
+  <span>GPU <b>{{ stats.offered_gpus }}</b> 基</span>
+  <span>空き <b>{{ stats.available_gpus }}</b> 基</span>
+  <span>料金 <b>無料</b></span>
+</p>
+
+<section class="section" id="how">
+  <div class="container">
+    <div class="section-head">
+      <h2>接続の経路</h2>
+      <p class="section-lead">利用者のPCと提供PCは直接つながりません。中央サーバーの SSH 中継を経由し、貸出ごとに発行したポートだけが開きます。</p>
+    </div>
+
+    <div class="route" role="img" aria-label="提供PCから中央サーバーを経由して利用者へ接続します">
+      <div class="route-node">
+        <span class="route-label">提供PC</span>
+        <span class="route-sub">空き時間だけ提供</span>
+      </div>
+      <span class="route-link" aria-hidden="true"></span>
+      <div class="route-node">
+        <span class="route-label">中央サーバー</span>
+        <span class="route-sub">認証・SSH中継</span>
+      </div>
+      <span class="route-link" aria-hidden="true"></span>
+      <div class="route-node">
+        <span class="route-label">あなた</span>
+        <span class="route-sub">SSHで接続</span>
+      </div>
+    </div>
+
+    <dl class="facts">
+      <div class="fact">
+        <dt>動かせるもの</dt>
+        <dd>運営が承認したテンプレートだけです。ホストのマウントや任意の Docker オプションは指定できません。</dd>
+      </div>
+      <div class="fact">
+        <dt>公開ポート</dt>
+        <dd>提供PC側に公開ポートは不要です。提供PCは外向きの接続だけで動きます。</dd>
+      </div>
+      <div class="fact">
+        <dt>作業データ</dt>
+        <dd>返却時に削除します。提供者のPCに作業内容が残り続けることはありません。</dd>
+      </div>
+      <div class="fact">
+        <dt>料金</dt>
+        <dd>かかりません。運営は利用者からも提供者からもお金を受け取りません。</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<section class="section section-tinted" id="join">
+  <div class="container join-grid">
+    <div class="join-copy">
+      <h2>借りるまでの3手順</h2>
+      <ol class="join-list join-list-wide">
+        <li>Discord サーバーに参加する（参加は無料、どなたでも）</li>
+        <li>「Discord でログイン」からアカウントを連携する</li>
+        <li>利用パネルで GPU とテンプレートを選び、表示された接続先へ SSH する</li>
+      </ol>
+      <p class="join-note">サーバー ID は {{ ctx.guild_id }} です。参加していない状態でログインすると、参加手順の案内が表示されます。</p>
+    </div>
+    <div class="join-actions">
+      {% if ctx.has_invite %}
+      <a class="btn btn-primary" href="{{ ctx.invite_url }}" target="_blank" rel="noopener noreferrer">Discord サーバーに参加する</a>
+      {% else %}
+      <p class="notice-missing">招待リンクが未設定です。運営に招待リンクを確認してください。</p>
+      {% endif %}
+      <a class="link" href="/how/">使い方の詳細</a>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="provide">
+  <div class="container provide-grid">
+    <div>
+      <h2>GPUを提供する場合</h2>
+      <p class="section-lead">空き時間だけの提供で構いません。受付は ON/OFF でき、止めたいときに止められます。電気代・通信費・機材費は提供者の負担で、運営からの支払いはありません。</p>
+      <ul class="plain-list">
+        <li>Docker が動く Linux と、対応する GPU が必要です</li>
+        <li>GPU ドライバーとコンテナ実行環境は提供者が用意します</li>
+        <li>受付 OFF は新規の貸出を止めるだけで、実行中のものは継続します</li>
+      </ul>
+      <a class="link" href="/providers/">提供者募集の詳細</a>
+    </div>
+    <div class="note-block">
+      <p class="note-title">提供の前に知っておくこと</p>
+      <p>貸出中のコンテナは提供者の GPU とメモリを使います。負荷が高い時間帯は受付を OFF にしてください。</p>
+      <p>承認済みテンプレート以外は起動できません。ホストのファイルを渡す仕組みはありません。</p>
+    </div>
+  </div>
+</section>
+
+<section class="section section-tinted" id="faq">
+  <div class="container faq-wrap">
+    <h2>よくある質問</h2>
+    <div class="faq">
+      <details class="faq-item">
+        <summary>本当に無料ですか？</summary>
+        <p>はい。利用料金はかかりません。運営は課金を行いません。提供者の空き時間を使っているため、稼働時間や性能の保証はありません。</p>
+      </details>
+      <details class="faq-item">
+        <summary>Discord に参加しないと使えませんか？</summary>
+        <p>はい。利用には Discord サーバーへの参加が必須です。参加は無料で、どなたでも可能です。</p>
+      </details>
+      <details class="faq-item">
+        <summary>GPU を持っていなくても使えますか？</summary>
+        <p>使えます。借りるだけなら GPU は不要です。提供に協力する場合は、対応 GPU と Docker が動く Linux マシンが必要です。</p>
+      </details>
+      <details class="faq-item">
+        <summary>作業中に提供PCの電源が落ちたらどうなりますか？</summary>
+        <p>提供PCの都合で実行が終了する場合があります。長い処理はこまめに保存してください。稼働時間の保証はありません。</p>
+      </details>
+      <details class="faq-item">
+        <summary>作業データは残りますか？</summary>
+        <p>返却時に削除されます。提供PC側に作業内容が残り続けることはありません。</p>
+      </details>
+      <details class="faq-item">
+        <summary>提供PCのIPアドレスは公開されますか？</summary>
+        <p>公開しません。接続は中央サーバーの中継を経由し、公開するのは GPU 名・ベンダー・VRAM・提供者の表示名・空き状態だけです。</p>
+      </details>
+    </div>
+  </div>
+</section>
+{% endblock %}

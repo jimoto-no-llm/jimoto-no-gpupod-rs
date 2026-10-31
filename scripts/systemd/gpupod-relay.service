@@ -1,0 +1,28 @@
+[Unit]
+Description=Jimoto GPU Pod SSH relay (split from the web process)
+Documentation=https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/blob/main/docs/deploy.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gpupod
+Group=gpupod
+WorkingDirectory=/var/lib/gpupod
+Environment=GPUPOD_CONTROL_STATE=/var/lib/gpupod/control
+EnvironmentFile=-/etc/gpupod/control.env
+# Web と分離したい場合だけ使う（gpupod-control.service の serve は中継も起動する）
+ExecStart=/usr/local/bin/gpupod-control runrelay --host 0.0.0.0
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+LimitNOFILE=65535
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/gpupod
+
+[Install]
+WantedBy=multi-user.target

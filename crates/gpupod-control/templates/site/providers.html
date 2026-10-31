@@ -1,0 +1,125 @@
+{% extends "site/base.html" %}
+{% block title %}提供者募集 — Jimoto GPU Pod{% endblock %}
+{% block description %}提供PCの空き時間でGPUを貸し出す提供者を募集しています。承認済みテンプレートのみ、公開ポート不要、返却時にデータ削除。無料運用です。{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+  <div class="container page-hero-inner">
+    <h1 class="page-title">提供者募集</h1>
+    <p class="page-lead">使っていない時間のGPUを、必要な人の作業に。空き時間だけの提供で構いません。</p>
+    <div class="page-hero-actions">
+      {% if ctx.has_invite %}
+      <a class="btn btn-primary" href="{{ ctx.invite_url }}" target="_blank" rel="noopener noreferrer">Discord で相談する</a>
+      {% else %}
+      <span class="notice-missing">招待リンクが未設定です。運営に招待リンクを確認してください。</span>
+      {% endif %}
+      <a class="btn btn-ghost" href="/how/">提供の手順を見る</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <h2>提供の流れ</h2>
+      <p class="section-lead">提供PCの登録から受付開始まで、4つのステップです。</p>
+    </div>
+    <ol class="steps steps-four">
+      <li class="step">
+        <span class="step-no" aria-hidden="true">1</span>
+        <h3>Discord に参加</h3>
+        <p>コミュニティの Discord サーバーに参加し、運営と方針を確認します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">2</span>
+        <h3>提供PCを登録</h3>
+        <p>利用パネルの提供PC管理から登録し、表示されたトークンをエージェントに設定します。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">3</span>
+        <h3>資源と受付を設定</h3>
+        <p>貸し出すRAM・ディスクの枠と、受付のON/OFFを設定します。提供PCに公開ポートは不要です。</p>
+      </li>
+      <li class="step">
+        <span class="step-no" aria-hidden="true">4</span>
+        <h3>空き時間に受付</h3>
+        <p>空いている時間だけ受付をONにします。作業が入るとコンテナが起動し、返却時に削除されます。</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section section-tinted">
+  <div class="container two-col">
+    <div>
+      <div class="section-head">
+        <h2>必要な環境</h2>
+      </div>
+      <ul class="check-list">
+        <li>Linux（Docker Engine が動作する環境）</li>
+        <li>NVIDIA GPU とドライバー、NVIDIA Container Toolkit</li>
+        <li>中央サーバーへの外向き HTTPS 接続（公開ポート・固定IPは不要）</li>
+        <li>提供できる時間帯の電源とネットワーク</li>
+        <li>SSH 公開鍵認証で接続できること（利用者側の要件）</li>
+      </ul>
+      <p class="muted">すべてを常時稼働させる必要はありません。受付をONにした時間だけ貸し出されます。</p>
+    </div>
+    <div>
+      <div class="section-head">
+        <h2>安心して提供するために</h2>
+      </div>
+      <ul class="check-list">
+        <li>実行できるのは承認済みテンプレートのみ</li>
+        <li>接続は中央中継を経由し、提供PCのIPアドレスは公開されません</li>
+        <li>作業データは返却時に削除されます</li>
+        <li>受付のON/OFFはいつでも切り替えられます</li>
+        <li>提供PCの都合による終了は許容される前提で運用します</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <h2>費用と見返り</h2>
+      <p class="section-lead">提供はボランティアベースです。運営は提供者に支払いをせず、提供者から料金も受け取りません。</p>
+    </div>
+    <div class="cards-3">
+      <div class="info-card">
+        <h3>かかる費用</h3>
+        <p>電気代・通信費・機材費は提供者の負担です。運営が請求することはありません。</p>
+      </div>
+      <div class="info-card">
+        <h3>見返り</h3>
+        <p>自分の空き時間が、地域の開発や学習に使われます。自分が借りる側にも回れる相互利用です。</p>
+      </div>
+      <div class="info-card">
+        <h3>無理をしない</h3>
+        <p>空き時間だけの提供で構いません。負担が大きいときは受付を OFF にできます。</p>
+      </div>
+    </div>
+    <p class="section-footnote">提供は強制ではありません。いつでも停止できます。詳しくは Discord サーバーで相談してください。</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cta-panel">
+      <div>
+        <h2>提供に協力してくれる方を募集しています</h2>
+        <p class="section-lead">まずは Discord サーバーに参加して、運営に声をかけてください。参加は誰でも可能です。</p>
+      </div>
+      <div class="cta-actions">
+        {% if ctx.has_invite %}
+        <a class="btn btn-primary" href="{{ ctx.invite_url }}" target="_blank" rel="noopener noreferrer">Discord に参加する</a>
+        {% else %}
+        <p class="notice-missing">招待リンクが未設定です。運営に招待リンクを確認してください。</p>
+        {% endif %}
+        <a class="btn btn-ghost" href="/how/">使い方を見る</a>
+      </div>
+    </div>
+    <p class="page-updated">最終更新: {{ updated }}</p>
+  </div>
+</section>
+{% endblock %}

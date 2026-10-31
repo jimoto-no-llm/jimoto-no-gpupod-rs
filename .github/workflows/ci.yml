@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: fmt (cargo fmt --check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --all --check
+        shell: bash
+        run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: clippy
+      - name: cargo clippy
+        # 現状は警告が残っているため -D warnings はまだ付けていません。
+        # ベースラインの整理後に clippy へ -D warnings を追加します（docs/development.md）。
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --workspace --all-targets --all-features --locked 2>&1 | tee "$RUNNER_TEMP/clippy.log"
+      - name: 警告数をまとめる
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/clippy.log" ]; then
+            count=$(grep -c '^warning: ' "$RUNNER_TEMP/clippy.log" || true)
+            echo "clippy の警告行数: ${count}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: clippy-log
+          path: ${{ runner.temp }}/clippy.log
+          retention-days: 7
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build
+      - name: cargo build (workspace, all targets)
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --workspace --all-targets --locked 2>&1 | tee "$RUNNER_TEMP/build.log"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-log
+          path: ${{ runner.temp }}/build.log
+          retention-days: 7
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+      - name: cargo test
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace --locked --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/test.log"
+      - name: 結果をまとめる
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/test.log" ]; then
+            grep -E '^test result:|^error' "$RUNNER_TEMP/test.log" | tail -40 >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-log
+          path: ${{ runner.temp }}/test.log
+          retention-days: 7

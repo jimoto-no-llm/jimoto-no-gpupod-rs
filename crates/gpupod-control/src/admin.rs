@@ -14,8 +14,8 @@ use axum::response::Response;
 use crate::auth;
 use crate::models::{self, ReleaseRow};
 use crate::web::{
-    self as web, error_page, flash_view, not_found_page, page_response, redirect, staff_identity, FlashView,
-    UserNav,
+    self as web, error_page, flash_view, not_found_page, page_response, redirect, staff_identity,
+    FlashView, UserNav,
 };
 
 /// /admin/
@@ -119,10 +119,13 @@ pub async fn index(State(app): State<Arc<crate::App>>, headers: HeaderMap) -> Re
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
     let page = AdminIndex {
-        user: web::user_nav(Some(&user)),
-        csrf: session.data.csrf.clone(),
+        user: web::user_nav_profile(&app.db, Some(&user)),
+        csrf: web::csrf_input(&session.data.csrf),
         messages,
     };
     page_response(&app, &session, &headers, page.render().unwrap_or_default())
@@ -138,14 +141,17 @@ pub async fn users(
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
     let rows = {
         let conn = app.db.lock();
         models::list_users(&conn).unwrap_or_default()
     };
     let page = AdminUsers {
-        user: web::user_nav(Some(&user)),
-        csrf: session.data.csrf.clone(),
+        user: web::user_nav_profile(&app.db, Some(&user)),
+        csrf: web::csrf_input(&session.data.csrf),
         messages,
         users: rows
             .into_iter()
@@ -168,14 +174,19 @@ pub async fn user_create(
     headers: HeaderMap,
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
-    let (session, _user) = match staff_identity(&app, &headers, "/admin/auth/user/") {
+    let (session, actor) = match staff_identity(&app, &headers, "/admin/auth/user/") {
         Ok(value) => value,
         Err(response) => return response,
     };
     if let Err(response) = web::check_csrf(&app, &headers, &form) {
         return response;
     }
-    let username = form.get("username").map(String::as_str).unwrap_or("").trim().to_string();
+    let username = form
+        .get("username")
+        .map(String::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let password = form.get("password").cloned().unwrap_or_default();
     if username.is_empty() || password.is_empty() {
         auth::push_message(&app.db, &session, "error", "このフィールドは必須です。");
@@ -183,19 +194,47 @@ pub async fn user_create(
     }
     let is_staff = form.contains_key("is_staff");
     let is_superuser = form.contains_key("is_superuser");
+    // 管理者（スーパーユーザー）を付与できるのは管理者だけにする
+    // （Django admin と同じく、権限昇格の経路を塞ぐ）。
+    if is_superuser && !actor.is_superuser {
+        auth::push_message(
+            &app.db,
+            &session,
+            "error",
+            "管理者を付与できるのは管理者だけです。",
+        );
+        return redirect("/admin/auth/user/");
+    }
     let is_active = form.contains_key("is_active");
     let encoded = auth::hash_password(&password);
     let created = {
         let conn = app.db.lock();
-        if models::find_user_by_username(&conn, &username).ok().flatten().is_some() {
+        if models::find_user_by_username(&conn, &username)
+            .ok()
+            .flatten()
+            .is_some()
+        {
             None
         } else {
-            models::insert_user(&conn, &username, &encoded, is_superuser, is_staff, is_active, "")
-                .ok()
+            models::insert_user(
+                &conn,
+                &username,
+                &encoded,
+                is_superuser,
+                is_staff,
+                is_active,
+                "",
+            )
+            .ok()
         }
     };
     if created.is_none() {
-        auth::push_message(&app.db, &session, "error", "このユーザー名は既に使われています。");
+        auth::push_message(
+            &app.db,
+            &session,
+            "error",
+            "このユーザー名は既に使われています。",
+        );
         return redirect("/admin/auth/user/");
     }
     redirect("/admin/auth/user/")
@@ -207,18 +246,25 @@ pub async fn templates_list(State(app): State<Arc<crate::App>>, headers: HeaderM
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
     let rows = {
         let conn = app.db.lock();
         models::list_templates(&conn).unwrap_or_default()
     };
     let page = AdminTemplates {
-        user: web::user_nav(Some(&user)),
-        csrf: session.data.csrf.clone(),
+        user: web::user_nav_profile(&app.db, Some(&user)),
+        csrf: web::csrf_input(&session.data.csrf),
         messages,
         templates: rows
             .into_iter()
-            .map(|row| TemplateRowView { id: row.id, name: row.name, enabled: row.enabled })
+            .map(|row| TemplateRowView {
+                id: row.id,
+                name: row.name,
+                enabled: row.enabled,
+            })
             .collect(),
     };
     page_response(&app, &session, &headers, page.render().unwrap_or_default())
@@ -265,7 +311,10 @@ pub async fn releases(
         Ok(value) => value,
         Err(response) => return response,
     };
-    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session).into_iter().map(flash_view).collect();
+    let messages: Vec<FlashView> = auth::take_messages(&app.db, &session)
+        .into_iter()
+        .map(flash_view)
+        .collect();
     let mut form = ReleaseForm::default();
     if let Some(sequence) = query.get("seq").and_then(|value| value.parse::<i64>().ok()) {
         let conn = app.db.lock();
@@ -285,8 +334,8 @@ pub async fn releases(
         models::list_all_releases(&conn).unwrap_or_default()
     };
     let page = AdminReleases {
-        user: web::user_nav(Some(&user)),
-        csrf: session.data.csrf.clone(),
+        user: web::user_nav_profile(&app.db, Some(&user)),
+        csrf: web::csrf_input(&session.data.csrf),
         messages,
         releases: rows
             .into_iter()
@@ -323,11 +372,17 @@ pub async fn release_save(
         auth::push_message(&app.db, session, "error", message);
         redirect(back)
     };
-    let sequence = match form.get("sequence").and_then(|value| value.trim().parse::<i64>().ok()) {
+    let sequence = match form
+        .get("sequence")
+        .and_then(|value| value.trim().parse::<i64>().ok())
+    {
         Some(value) if value >= 0 => value,
         _ => return fail(&session, "整数を入力してください。"),
     };
-    let rollout = match form.get("rollout_percent").and_then(|value| value.trim().parse::<i64>().ok()) {
+    let rollout = match form
+        .get("rollout_percent")
+        .and_then(|value| value.trim().parse::<i64>().ok())
+    {
         Some(value) if value >= 0 => value,
         Some(_) => return fail(&session, "0 以上の値を入力してください。"),
         None => return fail(&session, "整数を入力してください。"),
@@ -376,9 +431,9 @@ fn valid_release_target(target: &str) -> bool {
     }
     let body = &rest[..rest.len() - ".tar.gz".len()];
     !body.is_empty()
-        && body.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
-        })
+        && body
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
         && !body.starts_with('.')
         && !body.ends_with('.')
 }

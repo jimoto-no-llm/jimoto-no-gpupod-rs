@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use gpupod_common::resources::{self, Allocation, Pool};
-use gpupod_common::{AgentError, GPU, Template};
-use serde::{Serialize, Deserialize};
+use gpupod_common::{AgentError, Template, GPU};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::docker::{DockerEngine, DockerError};
@@ -191,7 +191,12 @@ impl Agent {
         templates: BTreeMap<String, Template>,
         gpus: Vec<GPU>,
     ) -> Self {
-        Self { store, engine, templates, gpus }
+        Self {
+            store,
+            engine,
+            templates,
+            gpus,
+        }
     }
 
     /// ID で GPU を引く。
@@ -200,7 +205,11 @@ impl Agent {
     }
 
     fn active(state: &AgentState) -> Vec<&Lease> {
-        state.leases.values().filter(|lease| lease.is_active()).collect()
+        state
+            .leases
+            .values()
+            .filter(|lease| lease.is_active())
+            .collect()
     }
 
     /// 予約計算用の配列（停止分は None 扱いにせず除外）。
@@ -260,11 +269,14 @@ impl Agent {
             })
             .collect();
         object.insert("gpus".into(), json!(gpus));
-        object.insert("resources".into(), serde_json::to_value(summary).map_err(|exc| {
-            AgentError::new(format!(
-                "Cannot read or save state; existing reservations retained: {exc}"
-            ))
-        })?);
+        object.insert(
+            "resources".into(),
+            serde_json::to_value(summary).map_err(|exc| {
+                AgentError::new(format!(
+                    "Cannot read or save state; existing reservations retained: {exc}"
+                ))
+            })?,
+        );
         Ok(result)
     }
 
@@ -277,7 +289,11 @@ impl Agent {
         default_disk_bytes: Option<u64>,
     ) -> Result<Value> {
         let count = std::cmp::max(1, self.gpus.len()) as u64;
-        resources::Allocation { memory_bytes, disk_bytes }.validate()?;
+        resources::Allocation {
+            memory_bytes,
+            disk_bytes,
+        }
+        .validate()?;
         let default_memory = default_memory_bytes.unwrap_or_else(|| {
             std::cmp::max(
                 resources::minimum("memory_bytes"),
@@ -290,7 +306,13 @@ impl Agent {
                 disk_bytes / count / resources::MIB * resources::MIB,
             )
         });
-        let pool = Pool { memory_bytes, disk_bytes, default_memory_bytes: default_memory, default_disk_bytes: default_disk }.validate()?;
+        let pool = Pool {
+            memory_bytes,
+            disk_bytes,
+            default_memory_bytes: default_memory,
+            default_disk_bytes: default_disk,
+        }
+        .validate()?;
         {
             let mut guard = self.store.locked()?;
             let has_active = guard.leases.values().any(|lease| lease.is_active());
@@ -403,13 +425,18 @@ impl Agent {
     /// 貸出の受付開始（Python 版 start）。
     pub fn start(&self, request: StartRequest) -> Result<Value> {
         if !self.templates.contains_key(request.template_id) {
-            return Err(AgentError::new("Only registered template IDs can be started"));
+            return Err(AgentError::new(
+                "Only registered template IDs can be started",
+            ));
         }
         if self.gpu(request.gpu_id).is_none() {
             return Err(AgentError::new("GPU is not registered on this node"));
         }
         let mut requested: Vec<String> = Vec::new();
-        let source = request.gpu_ids.clone().unwrap_or_else(|| vec![request.gpu_id.to_owned()]);
+        let source = request
+            .gpu_ids
+            .clone()
+            .unwrap_or_else(|| vec![request.gpu_id.to_owned()]);
         for id in source {
             if !requested.contains(&id) {
                 requested.push(id);
@@ -422,14 +449,25 @@ impl Agent {
             return Err(AgentError::new("Invalid diagnostic GPU group"));
         }
         if requested.len() > 1 && !request.diagnostic {
-            return Err(AgentError::new("GPU groups are reserved for the local diagnostic helper"));
+            return Err(AgentError::new(
+                "GPU groups are reserved for the local diagnostic helper",
+            ));
         }
         let template = self.templates[request.template_id].clone();
-        let gpus: Vec<GPU> = requested.iter().map(|id| self.gpu(id).unwrap().clone()).collect();
+        let gpus: Vec<GPU> = requested
+            .iter()
+            .map(|id| self.gpu(id).unwrap().clone())
+            .collect();
         let vendors: Vec<&String> = gpus.iter().map(|gpu| &gpu.vendor).collect();
         let unique: std::collections::BTreeSet<&String> = vendors.iter().copied().collect();
-        if unique.len() != 1 || gpus.iter().any(|gpu| !template.vendors.contains(&gpu.vendor)) {
-            return Err(AgentError::new("Template does not declare support for this GPU vendor"));
+        if unique.len() != 1
+            || gpus
+                .iter()
+                .any(|gpu| !template.vendors.contains(&gpu.vendor))
+        {
+            return Err(AgentError::new(
+                "Template does not declare support for this GPU vendor",
+            ));
         }
         let ssh_public_key = if request.ssh_public_key.is_empty() {
             String::new()
@@ -453,29 +491,39 @@ impl Agent {
         let (lease, node_id) = {
             let mut guard = self.store.locked()?;
             if let Some(existing) = guard.leases.get(&lease_id).cloned() {
-                if existing.gpu_id != request.gpu_id || existing.template_id != request.template_id {
+                if existing.gpu_id != request.gpu_id || existing.template_id != request.template_id
+                {
                     return Err(AgentError::new("Lease ID belongs to a different request"));
                 }
-                for (field, value) in [("memory_bytes", request.memory_bytes), ("disk_bytes", request.disk_bytes)] {
+                for (field, value) in [
+                    ("memory_bytes", request.memory_bytes),
+                    ("disk_bytes", request.disk_bytes),
+                ] {
                     if let Some(value) = value {
                         let expected = resources::size_bytes(value, field)?;
                         let current = existing.resources.map(|item| item.get(field)).unwrap_or(0);
                         if current != expected {
-                            return Err(AgentError::new("Lease ID belongs to a different resource request"));
+                            return Err(AgentError::new(
+                                "Lease ID belongs to a different resource request",
+                            ));
                         }
                     }
                 }
                 return Ok(serde_json::to_value(&existing).unwrap_or(Value::Null));
             }
             if request.diagnostic && guard.manual_enabled {
-                return Err(AgentError::new("Turn lending OFF before running diagnostics"));
+                return Err(AgentError::new(
+                    "Turn lending OFF before running diagnostics",
+                ));
             }
             if !request.diagnostic && (!guard.manual_enabled || guard.auto_busy) {
                 return Err(AgentError::new("Node is not accepting leases"));
             }
             let claimed = Self::active_gpu_ids(&guard);
             if requested.iter().any(|id| claimed.contains(id)) {
-                return Err(AgentError::new("GPU is already allocated or awaiting cleanup"));
+                return Err(AgentError::new(
+                    "GPU is already allocated or awaiting cleanup",
+                ));
             }
             let reserved = resources::claim(
                 guard.resource_pool.as_ref(),
@@ -525,7 +573,9 @@ impl Agent {
                 if !failure.uncertain() {
                     self.cleanup(&lease_id)?;
                 }
-                Err(AgentError::new(format!("Start failed for lease {lease_id}: {message}")))
+                Err(AgentError::new(format!(
+                    "Start failed for lease {lease_id}: {message}"
+                )))
             }
         }
     }
@@ -599,7 +649,11 @@ impl Agent {
             self.cleanup(lease_id)?;
         }
         let status = self.status()?;
-        Ok(status.get("leases").and_then(|leases| leases.get(lease_id)).cloned().unwrap_or(Value::Null))
+        Ok(status
+            .get("leases")
+            .and_then(|leases| leases.get(lease_id))
+            .cloned()
+            .unwrap_or(Value::Null))
     }
 
     /// 実態と状態の突き合わせ（Python 版 reconcile）。
@@ -738,7 +792,8 @@ pub fn validate_ssh_key(value: &str) -> Result<String> {
     let trimmed = value.trim();
     let key = russh::keys::ssh_key::PublicKey::from_openssh(trimmed)
         .map_err(|_| AgentError::new("Invalid SSH public key"))?;
-    let exported = key.to_openssh().map_err(|_| AgentError::new("Invalid SSH public key"))?;
+    let exported = key
+        .to_openssh()
+        .map_err(|_| AgentError::new("Invalid SSH public key"))?;
     Ok(exported.trim().to_owned())
 }
-

@@ -36,9 +36,14 @@ impl State {
     fn validate(&self) -> Result<()> {
         if self.version != 1
             || self.node_id.is_empty()
-            || self.leases.keys().any(|key| key != self.node_id.as_str() && false)
+            || self
+                .leases
+                .keys()
+                .any(|key| key != self.node_id.as_str() && false)
         {
-            bail!(AgentError::new("Unsupported or invalid state; existing reservations retained"));
+            bail!(AgentError::new(
+                "Unsupported or invalid state; existing reservations retained"
+            ));
         }
         Ok(())
     }
@@ -63,7 +68,10 @@ impl StateStore {
     pub fn new(directory: &Path) -> Result<StateStore> {
         super::files::ensure_private_dir(directory)?;
         let path = directory.join("state.sqlite3");
-        Ok(StateStore { directory: directory.to_path_buf(), path })
+        Ok(StateStore {
+            directory: directory.to_path_buf(),
+            path,
+        })
     }
 
     pub fn path(&self) -> &Path {
@@ -92,16 +100,18 @@ impl StateStore {
             return Ok(None);
         }
         let connection = open(&self.path)?;
-        let row: Option<String> = match connection
-            .query_row("SELECT payload FROM agent_state WHERE id=1", [], |row| row.get(0))
-        {
-            Ok(value) => Some(value),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(exc) => bail!(AgentError::new(format!("Cannot read state: {exc}"))),
-        };
+        let row: Option<String> =
+            match connection.query_row("SELECT payload FROM agent_state WHERE id=1", [], |row| {
+                row.get(0)
+            }) {
+                Ok(value) => Some(value),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(exc) => bail!(AgentError::new(format!("Cannot read state: {exc}"))),
+            };
         let Some(payload) = row else { return Ok(None) };
-        let state: State = serde_json::from_str(&payload)
-            .map_err(|_| AgentError::new("Unsupported or invalid state; existing reservations retained"))?;
+        let state: State = serde_json::from_str(&payload).map_err(|_| {
+            AgentError::new("Unsupported or invalid state; existing reservations retained")
+        })?;
         state.validate()?;
         Ok(Some(state))
     }

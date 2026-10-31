@@ -6,7 +6,9 @@ use std::path::Path;
 use gpupod_common::{AgentError, GPU};
 
 fn read_trimmed(path: impl AsRef<Path>) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|text| text.trim().to_owned())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|text| text.trim().to_owned())
 }
 
 /// nvidia-smi の PCI バス表記を 4 桁ドメイン付き小文字へ揃える。
@@ -61,11 +63,7 @@ pub fn discover_gpus() -> Result<Vec<GPU>, AgentError> {
         }
     }
 
-    let vendors = [
-        ("0x10de", "nvidia"),
-        ("0x1002", "amd"),
-        ("0x8086", "intel"),
-    ];
+    let vendors = [("0x10de", "nvidia"), ("0x1002", "amd"), ("0x8086", "intel")];
     let mut renders: Vec<std::path::PathBuf> = Vec::new();
     if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
         for entry in entries.flatten() {
@@ -134,12 +132,20 @@ pub fn load_gpus(path: Option<&str>) -> Result<Vec<GPU>, AgentError> {
     let items = value
         .as_array()
         .ok_or_else(|| AgentError::new("Cannot load GPU configuration: expected a JSON list"))?;
-    let allowed = ["id", "vendor", "name", "backend", "selector", "devices", "memory_mib"];
+    let allowed = [
+        "id",
+        "vendor",
+        "name",
+        "backend",
+        "selector",
+        "devices",
+        "memory_mib",
+    ];
     let mut result = Vec::new();
     for item in items {
-        let object = item
-            .as_object()
-            .ok_or_else(|| AgentError::new("Cannot load GPU configuration: expected a JSON object"))?;
+        let object = item.as_object().ok_or_else(|| {
+            AgentError::new("Cannot load GPU configuration: expected a JSON object")
+        })?;
         for key in object.keys() {
             if !allowed.contains(&key.as_str()) {
                 return Err(AgentError::new(format!(
@@ -209,7 +215,10 @@ pub fn run_with_timeout(
                     let code = status.code().unwrap_or(-1);
                     return Err(std::io::Error::other(format!(
                         "{program} exited with status {code}{}",
-                        status.signal().map(|s| format!(" (signal {s})")).unwrap_or_default()
+                        status
+                            .signal()
+                            .map(|s| format!(" (signal {s})"))
+                            .unwrap_or_default()
                     )));
                 }
                 let output = child.wait_with_output()?;

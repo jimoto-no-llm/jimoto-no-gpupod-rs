@@ -35,7 +35,11 @@ pub fn django_json(value: &Value) -> String {
             writer.write_all(b": ")
         }
 
-        fn write_string_fragment<W>(&mut self, writer: &mut W, fragment: &str) -> std::io::Result<()>
+        fn write_string_fragment<W>(
+            &mut self,
+            writer: &mut W,
+            fragment: &str,
+        ) -> std::io::Result<()>
         where
             W: ?Sized + std::io::Write,
         {
@@ -82,8 +86,17 @@ mod tests {
 
     #[test]
     fn django_separators_and_ascii_escape() {
-        assert_eq!(django_json(&json!({"error": "Invalid"})), r#"{"error": "Invalid"}"#);
-        assert_eq!(django_json(&json!({"a": 1, "b": [1, 2]})), r#"{"a": 1, "b": [1, 2]}"#);
-        assert_eq!(django_json(&json!({"error": "貸出中"})), r#"{"error": "\u8cb8\u51fa\u4e2d"}"#);
+        assert_eq!(
+            django_json(&json!({"error": "Invalid"})),
+            r#"{"error": "Invalid"}"#
+        );
+        assert_eq!(
+            django_json(&json!({"a": 1, "b": [1, 2]})),
+            r#"{"a": 1, "b": [1, 2]}"#
+        );
+        assert_eq!(
+            django_json(&json!({"error": "貸出中"})),
+            r#"{"error": "\u8cb8\u51fa\u4e2d"}"#
+        );
     }
 }

@@ -282,20 +282,40 @@ fn main() {
 
 fn dispatch(command: Command) -> Result<()> {
     match command {
-        Command::Doctor { devices, docker_socket, disk_path, mock_gpu } => {
-            let options = doctor::Options { devices, docker_socket, disk_path, mock_gpu };
+        Command::Doctor {
+            devices,
+            docker_socket,
+            disk_path,
+            mock_gpu,
+        } => {
+            let options = doctor::Options {
+                devices,
+                docker_socket,
+                disk_path,
+                mock_gpu,
+            };
             let (report, code) = doctor::run(&options)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
             if code != 0 {
                 std::process::exit(code);
             }
         }
-        Command::SystemdUnits { role, user, state_dir, config, output_dir, project } => {
+        Command::SystemdUnits {
+            role,
+            user,
+            state_dir,
+            config,
+            output_dir,
+            project,
+        } => {
             let project = match project {
                 Some(path) => path,
-                None => crate::support::repo::repo_root().context("Cannot find the repository root")?,
+                None => {
+                    crate::support::repo::repo_root().context("Cannot find the repository root")?
+                }
             };
-            let units = systemd_units::generate(&project, &state_dir, &config, &user, role.as_str())?;
+            let units =
+                systemd_units::generate(&project, &state_dir, &config, &user, role.as_str())?;
             for path in systemd_units::write_units(&units, &output_dir)? {
                 println!("{}", path.display());
             }
@@ -328,14 +348,25 @@ fn dispatch(command: Command) -> Result<()> {
             }
         }
         Command::RotateToken { config } => {
-            println!("{}", serde_json::to_string(&rotate_token::rotate_credentials(&config)?)?);
+            println!(
+                "{}",
+                serde_json::to_string(&rotate_token::rotate_credentials(&config)?)?
+            );
         }
-        Command::PrepareMirrors { mirrors, docker_config, output } => {
+        Command::PrepareMirrors {
+            mirrors,
+            docker_config,
+            output,
+        } => {
             let written = prepare_mirrors::prepare(&output, &mirrors, docker_config.as_deref())
                 .context("Could not prepare mirror configuration")?;
             println!("{}", written.display());
         }
-        Command::PrepareTemplate { template_id, templates, docker_socket } => {
+        Command::PrepareTemplate {
+            template_id,
+            templates,
+            docker_socket,
+        } => {
             let templates = templates.unwrap_or_else(|| prepare_template::default_catalog(None));
             match prepare_template::run(&template_id, &templates, &docker_socket) {
                 Ok(image) => println!("{image}"),
@@ -345,12 +376,22 @@ fn dispatch(command: Command) -> Result<()> {
                 }
             }
         }
-        Command::PrepareRuntime { output_dir, docker_config, gpu } => {
-            let destination =
-                prepare_runtime::prepare(&output_dir, docker_config.as_deref(), gpu)?;
+        Command::PrepareRuntime {
+            output_dir,
+            docker_config,
+            gpu,
+        } => {
+            let destination = prepare_runtime::prepare(&output_dir, docker_config.as_deref(), gpu)?;
             println!("{}", destination.display());
         }
-        Command::SupportBundle { state_dir, config, log, output, docker_socket, mock_gpu } => {
+        Command::SupportBundle {
+            state_dir,
+            config,
+            log,
+            output,
+            docker_socket,
+            mock_gpu,
+        } => {
             let output = output.unwrap_or_else(|| {
                 PathBuf::from("support-bundles").join(format!(
                     "provider-{}.tar.gz",
@@ -393,15 +434,33 @@ fn dispatch(command: Command) -> Result<()> {
             let variants: Vec<String> = pytorch.iter().map(|v| v.as_str().to_string()).collect();
             build_images::run(&variants, &root)?;
         }
-        Command::Demo { pytorch, port, relay_port, state_dir } => {
-            let options = demo::Options { pytorch, state_dir, port, relay_port };
+        Command::Demo {
+            pytorch,
+            port,
+            relay_port,
+            state_dir,
+        } => {
+            let options = demo::Options {
+                pytorch,
+                state_dir,
+                port,
+                relay_port,
+            };
             demo::run(&options)?;
         }
-        Command::ReleaseRepository { repository, keys_dir, action } => match action {
+        Command::ReleaseRepository {
+            repository,
+            keys_dir,
+            action,
+        } => match action {
             ReleaseAction::Init => {
                 release_repository::initialize(&repository, &keys_dir)?;
             }
-            ReleaseAction::Publish { source, version, sequence } => {
+            ReleaseAction::Publish {
+                source,
+                version,
+                sequence,
+            } => {
                 let source = match source {
                     Some(path) => path,
                     None => crate::support::repo::repo_root()?,

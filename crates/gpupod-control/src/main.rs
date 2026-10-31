@@ -7,7 +7,11 @@ use clap::{Parser, Subcommand};
 use gpupod_control::{relay, web, App, Config};
 
 #[derive(Parser)]
-#[command(name = "gpupod-control", version, about = "Jimoto GPU Pod 中央サーバー")]
+#[command(
+    name = "gpupod-control",
+    version,
+    about = "Jimoto GPU Pod 中央サーバー"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -73,7 +77,10 @@ fn main() -> anyhow::Result<()> {
             config.ensure_state_dir()?;
             let db = gpupod_control::Db::open(&config.db_path())?;
             db.migrate()?;
-            println!("マイグレーションを適用しました: {}", config.db_path().display());
+            println!(
+                "マイグレーションを適用しました: {}",
+                config.db_path().display()
+            );
         }
         Command::InitControl => {
             let config = Config::from_env();
@@ -122,13 +129,7 @@ fn main() -> anyhow::Result<()> {
                     None
                 } else {
                     Some(gpupod_control::models::insert_user(
-                        &conn,
-                        &username,
-                        &encoded,
-                        true,
-                        true,
-                        true,
-                        "",
+                        &conn, &username, &encoded, true, true, true, "",
                     )?)
                 }
             };

@@ -118,4 +118,3 @@ fn open_lock(path: &Path) -> Result<File> {
         .open(path)
         .with_context(|| format!("Cannot open the lock file {}", path.display()))
 }
-

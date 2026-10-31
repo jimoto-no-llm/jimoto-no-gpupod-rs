@@ -1,0 +1,6 @@
+# clippy の設定。CI は cargo clippy --workspace --all-targets --all-features を実行します。
+# ルート Cargo.toml の rust-version と揃えます。
+msrv = "1.85"
+# テストでは unwrap/expect を許可し、本体コードの指摘に集中します。
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

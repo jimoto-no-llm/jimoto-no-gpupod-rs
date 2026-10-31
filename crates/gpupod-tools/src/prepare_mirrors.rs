@@ -13,9 +13,7 @@ use crate::support::url::{scheme_allowed, urlsplit};
 pub fn mirror_url(value: &str) -> Result<String> {
     let parts = urlsplit(value);
     let local = parts.hostname().as_deref() == Some("localhost") || parts.is_loopback_host();
-    let host = parts
-        .hostname()
-        .ok_or_else(|| invalid_mirror())?;
+    let host = parts.hostname().ok_or_else(|| invalid_mirror())?;
     if parts.username().is_some()
         || parts.password().is_some()
         || !parts.query.is_empty()
@@ -26,9 +24,15 @@ pub fn mirror_url(value: &str) -> Result<String> {
     {
         bail!(invalid_mirror());
     }
-    parts.port().map_err(|_| AgentError::new("Invalid mirror port"))?;
+    parts
+        .port()
+        .map_err(|_| AgentError::new("Invalid mirror port"))?;
     endpoint_host(&host).map_err(|_| AgentError::new("Invalid mirror hostname"))?;
-    Ok(format!("{}://{}", parts.scheme, parts.netloc.to_lowercase()))
+    Ok(format!(
+        "{}://{}",
+        parts.scheme,
+        parts.netloc.to_lowercase()
+    ))
 }
 
 fn invalid_mirror() -> AgentError {
@@ -41,7 +45,9 @@ fn invalid_mirror() -> AgentError {
 /// 既存の daemon.json にミラーをマージする。新しい指定が先頭を占める。
 pub fn merge_mirrors(config: &serde_json::Value, mirrors: &[String]) -> Result<serde_json::Value> {
     let Some(object) = config.as_object() else {
-        bail!(AgentError::new("Docker configuration must be a JSON object"));
+        bail!(AgentError::new(
+            "Docker configuration must be a JSON object"
+        ));
     };
     let mut result = object.clone();
     let existing = match result.get("registry-mirrors") {
@@ -56,7 +62,9 @@ pub fn merge_mirrors(config: &serde_json::Value, mirrors: &[String]) -> Result<s
             }
             values
         }
-        Some(_) => bail!(AgentError::new("Existing registry-mirrors must be a list of URLs")),
+        Some(_) => bail!(AgentError::new(
+            "Existing registry-mirrors must be a list of URLs"
+        )),
     };
     let mut merged: Vec<String> = Vec::new();
     for item in mirrors.iter().chain(existing.iter()) {
@@ -76,11 +84,7 @@ pub fn merge_mirrors(config: &serde_json::Value, mirrors: &[String]) -> Result<s
 }
 
 /// 出力先を守りながら候補ファイルを作る。
-pub fn prepare(
-    output: &Path,
-    mirrors: &[String],
-    source_config: Option<&Path>,
-) -> Result<PathBuf> {
+pub fn prepare(output: &Path, mirrors: &[String], source_config: Option<&Path>) -> Result<PathBuf> {
     let output_absolute = absolute(output)?;
     if let Some(source) = source_config {
         let source_absolute = absolute(source)?;
@@ -98,7 +102,8 @@ pub fn prepare(
     let config = match source_config {
         Some(path) => {
             let raw = std::fs::read_to_string(path).context("Cannot read the Docker config")?;
-            serde_json::from_str::<serde_json::Value>(&raw).context("Cannot parse the Docker config")?
+            serde_json::from_str::<serde_json::Value>(&raw)
+                .context("Cannot parse the Docker config")?
         }
         None => serde_json::json!({}),
     };
@@ -172,7 +177,11 @@ mod tests {
         let merged = merge_mirrors(&config, &["https://first.example.org".into()]).unwrap();
         assert_eq!(
             merged["registry-mirrors"],
-            json!(["https://first.example.org", "https://old.example.org", "https://new.example.org"])
+            json!([
+                "https://first.example.org",
+                "https://old.example.org",
+                "https://new.example.org"
+            ])
         );
         assert_eq!(merged["debug"], json!(true));
     }
@@ -193,12 +202,20 @@ mod tests {
         assert_eq!(written, output);
         let saved: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&output).unwrap()).unwrap();
-        assert_eq!(saved["registry-mirrors"], json!(["https://mirror.example.org"]));
+        assert_eq!(
+            saved["registry-mirrors"],
+            json!(["https://mirror.example.org"])
+        );
         assert!(prepare(&output, &["https://mirror.example.org".into()], None).is_err());
 
         let source = directory.path().join("daemon.json");
         std::fs::write(&source, "{}").unwrap();
-        assert!(prepare(&source, &["https://mirror.example.org".into()], Some(&source)).is_err());
+        assert!(prepare(
+            &source,
+            &["https://mirror.example.org".into()],
+            Some(&source)
+        )
+        .is_err());
     }
 
     #[test]
@@ -207,7 +224,12 @@ mod tests {
         let source = directory.path().join("daemon.json");
         std::fs::write(&source, "{\"log-level\": \"warn\"}").unwrap();
         let output = directory.path().join("candidate.json");
-        prepare(&output, &["https://mirror.example.org".into()], Some(&source)).unwrap();
+        prepare(
+            &output,
+            &["https://mirror.example.org".into()],
+            Some(&source),
+        )
+        .unwrap();
         let saved: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&output).unwrap()).unwrap();
         assert_eq!(saved["log-level"], json!("warn"));

@@ -39,7 +39,12 @@ pub fn rotate_credentials(config_path: &Path) -> Result<serde_json::Value> {
         .context("Cannot create the HTTP client")?;
     let candidate = format!("Bearer {}", pending["token"].as_str().unwrap_or_default());
     let rotation_id = pending["id"].clone();
-    let mut commit = post_json(&client, &format!("{base}/commit/"), &candidate, &json!({"id": rotation_id}))?;
+    let mut commit = post_json(
+        &client,
+        &format!("{base}/commit/"),
+        &candidate,
+        &json!({"id": rotation_id}),
+    )?;
     let commit_status = commit.status().as_u16();
     if commit_status == 403 || commit_status == 409 {
         // 事前登録が欠けている（または古い）場合は中央の現在キーで prepare し直す。
@@ -56,7 +61,12 @@ pub fn rotate_credentials(config_path: &Path) -> Result<serde_json::Value> {
                 prepared.status()
             )));
         }
-        commit = post_json(&client, &format!("{base}/commit/"), &candidate, &json!({"id": rotation_id}))?;
+        commit = post_json(
+            &client,
+            &format!("{base}/commit/"),
+            &candidate,
+            &json!({"id": rotation_id}),
+        )?;
     }
     if !commit.status().is_success() {
         bail!(AgentError::new(format!(
@@ -64,7 +74,8 @@ pub fn rotate_credentials(config_path: &Path) -> Result<serde_json::Value> {
             commit.status()
         )));
     }
-    let confirmed: serde_json::Value = commit.json().context("Cannot read the rotation response")?;
+    let confirmed: serde_json::Value =
+        commit.json().context("Cannot read the rotation response")?;
     if confirmed.get("id") != Some(&rotation_id) {
         bail!(AgentError::new(
             "Central server did not confirm this credential rotation"
@@ -94,8 +105,8 @@ fn post_json(
 }
 
 fn read_json(path: &Path) -> Result<serde_json::Value> {
-    let raw = std::fs::read_to_string(path)
-        .with_context(|| format!("Cannot read {}", path.display()))?;
+    let raw =
+        std::fs::read_to_string(path).with_context(|| format!("Cannot read {}", path.display()))?;
     serde_json::from_str(&raw).with_context(|| format!("Cannot parse {}", path.display()))
 }
 
@@ -128,7 +139,9 @@ mod tests {
         let address = listener.local_addr().unwrap();
         std::thread::spawn(move || {
             for (status, body) in responses {
-                let Ok((mut stream, _)) = listener.accept() else { return };
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
                 let mut buffer = [0u8; 8192];
                 let mut read = 0;
                 loop {
@@ -207,7 +220,9 @@ mod tests {
     fn token_urlsafe_is_url_safe() {
         let token = token_urlsafe(48);
         assert_eq!(token.len(), 64);
-        assert!(token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
         assert_ne!(token, token_urlsafe(48));
     }
 }

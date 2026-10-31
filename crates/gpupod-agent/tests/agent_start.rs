@@ -35,7 +35,10 @@ fn nvidia_only_templates() -> std::collections::BTreeMap<String, Template> {
     map
 }
 
-fn agent_in(directory: &std::path::Path, templates: std::collections::BTreeMap<String, Template>) -> Agent {
+fn agent_in(
+    directory: &std::path::Path,
+    templates: std::collections::BTreeMap<String, Template>,
+) -> Agent {
     agent_with_gpus(directory, templates, mock_gpus())
 }
 
@@ -93,7 +96,10 @@ fn rejects_vendor_mismatch() {
     let agent = agent_in(temporary.path(), nvidia_only_templates());
     agent.on().expect("on");
     let error = error_of(agent.start(StartRequest::new("nvidia-only", "mock-amd")));
-    assert_eq!(error, "Template does not declare support for this GPU vendor");
+    assert_eq!(
+        error,
+        "Template does not declare support for this GPU vendor"
+    );
 }
 
 #[test]
@@ -120,7 +126,9 @@ fn rejects_double_allocation() {
     assert_eq!(lease["status"], "running");
     assert_eq!(lease["container"], "gpulend-lease-one");
 
-    let error = error_of(agent.start(StartRequest::new("ubuntu-24.04", "mock-nvidia").lease_id("lease-two")));
+    let error = error_of(
+        agent.start(StartRequest::new("ubuntu-24.04", "mock-nvidia").lease_id("lease-two")),
+    );
     assert_eq!(error, "GPU is already allocated or awaiting cleanup");
 
     // 返却してからなら再び借りられる。
@@ -154,15 +162,15 @@ fn rejects_diagnostic_group_rules() {
                 .gpu_ids(Some(vec!["mock-nvidia".into(), "mock-nvidia-2".into()])),
         ),
     );
-    assert_eq!(error, "GPU groups are reserved for the local diagnostic helper");
+    assert_eq!(
+        error,
+        "GPU groups are reserved for the local diagnostic helper"
+    );
 
     // 主 GPU 以外から始められない。
-    let error = error_of(
-        agent.start(
-            StartRequest::new("ubuntu-24.04", "mock-amd")
-                .gpu_ids(Some(vec!["mock-nvidia".into()])),
-        ),
-    );
+    let error = error_of(agent.start(
+        StartRequest::new("ubuntu-24.04", "mock-amd").gpu_ids(Some(vec!["mock-nvidia".into()])),
+    ));
     assert_eq!(error, "Invalid diagnostic GPU group");
 }
 
@@ -185,9 +193,8 @@ fn rejects_unknown_connection_mode_and_lease_mismatch() {
         .expect("repeat");
     assert_eq!(repeat["id"], "lease-a");
 
-    let error = error_of(
-        agent.start(StartRequest::new("ubuntu-24.04", "mock-amd").lease_id("lease-a")),
-    );
+    let error =
+        error_of(agent.start(StartRequest::new("ubuntu-24.04", "mock-amd").lease_id("lease-a")));
     assert_eq!(error, "Lease ID belongs to a different request");
 }
 
@@ -228,7 +235,10 @@ fn uncertain_engine_failure_retains_the_reservation() {
         "Start failed for lease lease-uncertain: Docker timed out; reservation retained until reconciliation"
     );
     let status = agent.status().expect("status");
-    assert_eq!(status["leases"]["lease-uncertain"]["status"], "cleanup_pending");
+    assert_eq!(
+        status["leases"]["lease-uncertain"]["status"],
+        "cleanup_pending"
+    );
 }
 
 #[test]

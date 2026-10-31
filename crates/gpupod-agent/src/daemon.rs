@@ -39,12 +39,17 @@ fn default_relay_port() -> u16 {
     19000
 }
 
+/// 1 接続で同時に張る中継経路の上限。
+const MAX_FORWARD_PORTS: usize = 256;
+
 fn default_watchdog_timeout() -> f64 {
     180.0
 }
 
 /// プロバイダー認証情報 JSON（0600 権限で置く）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Debug は機材キーを伏せる（ログやパニックメッセージへ鍵を出さない）。
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub url: String,
     pub node_id: String,
@@ -70,6 +75,27 @@ pub struct ProviderConfig {
     /// 未知のキー（repository_url 等）は交換書き戻しで失わない。
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+impl std::fmt::Debug for ProviderConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderConfig")
+            .field("url", &self.url)
+            .field("node_id", &self.node_id)
+            .field("token", &"<redacted>")
+            .field("relay_host", &self.relay_host)
+            .field("relay_host_key", &self.relay_host_key)
+            .field("relay_port", &self.relay_port)
+            .field("direct_host", &self.direct_host)
+            .field("direct_bind", &self.direct_bind)
+            .field("limits", &self.limits)
+            .field("min_disk_free_bytes", &self.min_disk_free_bytes)
+            .field("runtime", &self.runtime)
+            .field("watchdog_timeout", &self.watchdog_timeout)
+            .field("disk_path", &self.disk_path)
+            .finish()
+    }
 }
 
 /// Python の urllib.parse.urlsplit 相当（検証用の軽い分解）。
@@ -135,12 +161,40 @@ fn split_url(value: &str) -> UrlParts {
 }
 
 fn is_loopback(host: &str) -> bool {
-    host == "localhost" || host.parse::<IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
+    host == "localhost"
+        || host
+            .parse::<IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false)
+}
+
+/// 認証情報ファイルの権限を 0600 に寄せる（他ユーザーから鍵を読ませない）。
+fn harden_config_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(path) {
+            let mode = metadata.permissions().mode() & 0o777;
+            if mode & 0o077 != 0 {
+                warn!(
+                    "Provider config {} is readable by other users (mode {:04o}); restricting to 0600",
+                    path.display(),
+                    mode
+                );
+                let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
 }
 
 /// 認証情報ファイルを検証する（Python 版 load_config）。
 pub fn load_config(path: impl AsRef<Path>) -> Result<ProviderConfig> {
     let text = std::fs::read_to_string(path.as_ref()).map_err(wrapped)?;
+    harden_config_permissions(path.as_ref());
     let value: Value = serde_json::from_str(&text).map_err(wrapped)?;
     let object = value
         .as_object()
@@ -220,7 +274,9 @@ pub fn load_config(path: impl AsRef<Path>) -> Result<ProviderConfig> {
                 return Err(AgentError::new("Unknown resource budget"));
             }
             let number = value.as_i64().filter(|number| *number > 0).ok_or_else(|| {
-                AgentError::new("Resource budgets must be positive integers in bytes/nanocpus/count")
+                AgentError::new(
+                    "Resource budgets must be positive integers in bytes/nanocpus/count",
+                )
             })?;
             limits.insert(key.clone(), number);
         }
@@ -253,7 +309,9 @@ pub fn load_config(path: impl AsRef<Path>) -> Result<ProviderConfig> {
                 .as_f64()
                 .ok_or_else(|| AgentError::new("Watchdog timeout must be at least 30 seconds"))?;
             if number < 30.0 {
-                return Err(AgentError::new("Watchdog timeout must be at least 30 seconds"));
+                return Err(AgentError::new(
+                    "Watchdog timeout must be at least 30 seconds",
+                ));
             }
             number
         }
@@ -270,7 +328,8 @@ pub fn load_config(path: impl AsRef<Path>) -> Result<ProviderConfig> {
         Some(value) => value
             .as_u64()
             .and_then(|number| u16::try_from(number).ok())
-            .ok_or_else(|| wrapped("expected a port number"))?,
+            .filter(|port| *port != 0)
+            .ok_or_else(|| wrapped("expected a port number between 1 and 65535"))?,
     };
 
     let known: HashSet<&str> = [
@@ -450,6 +509,14 @@ impl Forwarder {
                 continue;
             };
             if let Ok(host_port) = host_port.parse::<u16>() {
+                // 中継も特権ポートと制御ポートは受け付けない。数も上限で抑える。
+                if route.relay_port < 1024 {
+                    continue;
+                }
+                if wanted.len() >= MAX_FORWARD_PORTS && !wanted.contains_key(&route.relay_port) {
+                    warn!("Relay routes exceed the supported limit; extra routes ignored");
+                    continue;
+                }
                 wanted.insert(route.relay_port, host_port);
             }
         }
@@ -458,7 +525,12 @@ impl Forwarder {
             self.close().await;
             return Ok(());
         }
-        if self.connection.as_ref().map(|handle| handle.is_closed()).unwrap_or(false) {
+        if self
+            .connection
+            .as_ref()
+            .map(|handle| handle.is_closed())
+            .unwrap_or(false)
+        {
             self.close().await;
         }
         // 変わった経路は再接続前に閉じ、古い TCP 流れが復帰後も生きないようにする。
@@ -491,7 +563,10 @@ impl Forwarder {
                 .await?;
             self.listeners.insert(
                 *relay_port,
-                Listener { local_port: *local_port, address: bind_host.to_owned() },
+                Listener {
+                    local_port: *local_port,
+                    address: bind_host.to_owned(),
+                },
             );
         }
         Ok(())
@@ -513,7 +588,11 @@ impl Forwarder {
         )
         .await
         .map_err(|_| anyhow::anyhow!("SSH connect timed out"))??;
-        let token = self.token.read().unwrap_or_else(|exc| exc.into_inner()).clone();
+        let token = self
+            .token
+            .read()
+            .unwrap_or_else(|exc| exc.into_inner())
+            .clone();
         let username = format!("node:{}", self.config.node_id);
         let auth = tokio::time::timeout(
             Duration::from_secs(10),
@@ -542,7 +621,10 @@ impl Forwarder {
         } else {
             self.listeners.clear();
         }
-        self.targets.lock().unwrap_or_else(|exc| exc.into_inner()).clear();
+        self.targets
+            .lock()
+            .unwrap_or_else(|exc| exc.into_inner())
+            .clear();
         self.authenticated_token_hash = None;
     }
 }
@@ -660,7 +742,9 @@ impl WorkerContext {
         if object.get("connection_mode").and_then(|v| v.as_str()) == Some("direct")
             && self.config.direct_host.is_none()
         {
-            return Err(AgentError::new("Provider has not enabled direct connections"));
+            return Err(AgentError::new(
+                "Provider has not enabled direct connections",
+            ));
         }
         let template_id = string_field(object, "template_id")?;
         let gpu_id = string_field(object, "gpu_id")?;
@@ -736,13 +820,20 @@ impl WorkerContext {
             .unwrap_or_else(|exc| exc.into_inner())
             .clone();
         let results = self.results();
-        let token = self.token.read().unwrap_or_else(|exc| exc.into_inner()).clone();
+        let token = self
+            .token
+            .read()
+            .unwrap_or_else(|exc| exc.into_inner())
+            .clone();
         let client = reqwest::blocking::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
             .build()
             .map_err(|exc| AgentError::new(format!("{exc}")))?;
-        let url = format!("{}/api/nodes/{}/sync/", self.config.url, self.config.node_id);
+        let url = format!(
+            "{}/api/nodes/{}/sync/",
+            self.config.url, self.config.node_id
+        );
         let response = client
             .post(&url)
             .header("Authorization", format!("Bearer {token}"))
@@ -759,7 +850,9 @@ impl WorkerContext {
                 response.status()
             )));
         }
-        let raw: Value = response.json().map_err(|exc| AgentError::new(format!("{exc}")))?;
+        let raw: Value = response
+            .json()
+            .map_err(|exc| AgentError::new(format!("{exc}")))?;
         let reply: SyncResponse =
             serde_json::from_value(raw.clone()).map_err(|exc| AgentError::new(format!("{exc}")))?;
         let release = raw.get("release").cloned().unwrap_or(Value::Null);
@@ -914,18 +1007,18 @@ impl ProviderDaemon {
                 .disk_path
                 .clone()
                 .unwrap_or_else(|| self.agent.store.directory.to_string_lossy().into_owned());
-            let collected =
-                tokio::task::spawn_blocking(move || -> Result<(Value, Value)> {
-                    context.agent.reconcile()?;
-                    let metrics = context.agent.statistics()?;
-                    let host = telemetry::collect(&gpus, Path::new(&disk_path))
-                        .map_err(|exc| AgentError::new(format!("{exc}")))?;
-                    Ok((metrics, host))
-                })
-                .await;
+            let collected = tokio::task::spawn_blocking(move || -> Result<(Value, Value)> {
+                context.agent.reconcile()?;
+                let metrics = context.agent.statistics()?;
+                let host = telemetry::collect(&gpus, Path::new(&disk_path))
+                    .map_err(|exc| AgentError::new(format!("{exc}")))?;
+                Ok((metrics, host))
+            })
+            .await;
             match collected {
                 Ok(Ok((mut metrics, host))) => {
-                    if let (Some(object), Some(host)) = (metrics.as_object_mut(), host.as_object()) {
+                    if let (Some(object), Some(host)) = (metrics.as_object_mut(), host.as_object())
+                    {
                         for (key, value) in host {
                             object.insert(key.clone(), value.clone());
                         }
@@ -933,9 +1026,11 @@ impl ProviderDaemon {
                     metrics["mock_gpu"] = json!(self.mock);
                     metrics["limits"] = json!(self.config.limits);
                     metrics["min_disk_free_bytes"] = json!(self.config.min_disk_free_bytes);
-                    metrics["runtime"] = json!(
-                        self.config.runtime.clone().unwrap_or_else(|| "runc".to_owned())
-                    );
+                    metrics["runtime"] = json!(self
+                        .config
+                        .runtime
+                        .clone()
+                        .unwrap_or_else(|| "runc".to_owned()));
                     let release = self
                         .health
                         .lock()
@@ -945,21 +1040,26 @@ impl ProviderDaemon {
                     metrics["release"] = release;
                     let mut benchmarks = serde_json::Map::new();
                     benchmarks.insert("version".into(), json!(1));
-                    if let Some(results) =
-                        read_results(&self.agent.store.directory).as_object()
-                    {
+                    if let Some(results) = read_results(&self.agent.store.directory).as_object() {
                         for (key, value) in results {
                             benchmarks.insert(key.clone(), value.clone());
                         }
                     }
                     metrics["benchmarks"] = Value::Object(benchmarks);
-                    *self.statistics.lock().unwrap_or_else(|exc| exc.into_inner()) = metrics;
+                    *self
+                        .statistics
+                        .lock()
+                        .unwrap_or_else(|exc| exc.into_inner()) = metrics;
                 }
                 Ok(Err(exc)) => warn!("Reconciliation/metrics unavailable: {}", exc.0),
                 Err(exc) => warn!("Reconciliation/metrics unavailable: {exc}"),
             }
             self.beat("maintenance");
-            let interval = if self.interval < 2.0 { 2.0 } else { self.interval };
+            let interval = if self.interval < 2.0 {
+                2.0
+            } else {
+                self.interval
+            };
             tokio::time::sleep(Duration::from_secs_f64(interval)).await;
         }
     }
@@ -979,8 +1079,10 @@ impl ProviderDaemon {
                         routes.1 = data.bind_host;
                     }
                     {
-                        let mut desired =
-                            self.desired_release.lock().unwrap_or_else(|exc| exc.into_inner());
+                        let mut desired = self
+                            .desired_release
+                            .lock()
+                            .unwrap_or_else(|exc| exc.into_inner());
                         if *desired != DesiredRelease::Set(data.release.clone()) {
                             *desired = DesiredRelease::Set(data.release.clone());
                             let path = self.agent.store.directory.join("desired-release.json");
@@ -1071,7 +1173,10 @@ impl ProviderDaemon {
             if let Err(exc) = atomic_json(path, &snapshot) {
                 warn!("Cannot write health.json: {}", exc.0);
             }
-            let healthy = snapshot.get("healthy").and_then(|v| v.as_bool()).unwrap_or(false);
+            let healthy = snapshot
+                .get("healthy")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let stalled: Vec<String> = snapshot
                 .get("stalled")
                 .and_then(|v| v.as_array())
@@ -1098,8 +1203,10 @@ impl ProviderDaemon {
 
     /// 5 タスクを立ち上げ、停止まで待つ（Python 版 run）。
     pub async fn run(self: Arc<Self>) -> Result<bool> {
-        if self.interval < 0.1 {
-            return Err(AgentError::new("Polling interval must be at least 0.1 seconds"));
+        if !self.interval.is_finite() || self.interval < 0.1 {
+            return Err(AgentError::new(
+                "Polling interval must be a finite number of at least 0.1 seconds",
+            ));
         }
         let lock_path = self.agent.store.directory.join("daemon.lock");
         let lock = std::fs::OpenOptions::new()
@@ -1109,7 +1216,9 @@ impl ProviderDaemon {
             .open(&lock_path)
             .map_err(|exc| AgentError::new(format!("{exc}")))?;
         if fs4::FileExt::try_lock(&lock).is_err() {
-            return Err(AgentError::new("Another provider operation is still running"));
+            return Err(AgentError::new(
+                "Another provider operation is still running",
+            ));
         }
 
         let mut worker = tokio::spawn(self.clone().worker());
@@ -1127,7 +1236,13 @@ impl ProviderDaemon {
             _ = tokio::signal::ctrl_c() => true,
         };
 
-        for task in [&mut worker, &mut maintain, &mut poll, &mut tunnels, &mut watchdog] {
+        for task in [
+            &mut worker,
+            &mut maintain,
+            &mut poll,
+            &mut tunnels,
+            &mut watchdog,
+        ] {
             task.abort();
         }
         for task in [worker, maintain, poll, tunnels, watchdog] {
@@ -1144,5 +1259,9 @@ impl ProviderDaemon {
 fn clamp_backoff(backoff: f64) -> f64 {
     let doubled = backoff * 2.0;
     let doubled = if doubled < 2.0 { 2.0 } else { doubled };
-    if doubled > 30.0 { 30.0 } else { doubled }
+    if doubled > 30.0 {
+        30.0
+    } else {
+        doubled
+    }
 }

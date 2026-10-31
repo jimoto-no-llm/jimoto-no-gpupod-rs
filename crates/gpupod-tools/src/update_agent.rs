@@ -9,9 +9,9 @@ use anyhow::{bail, Context, Result};
 use gpupod_common::AgentError;
 use serde_json::{json, Value};
 
+use crate::release_repository::{SOURCE_DIRS, TOP_FILES};
 use crate::support::config::{checked_url, UpdaterConfig};
 use crate::support::files::{atomic_bytes, HeldLock};
-use crate::release_repository::{SOURCE_DIRS, TOP_FILES};
 use crate::support::tuf;
 
 const MAX_RELEASE_BYTES: u64 = 32 * 1024 * 1024;
@@ -63,12 +63,15 @@ where
     }
     let previous = std::fs::canonicalize(&current).context("Cannot resolve the current release")?;
     let archive = fetch_release(config, request)?;
-    let directory = root.join("releases").join(format!("{:08}", request.sequence));
+    let directory = root
+        .join("releases")
+        .join(format!("{:08}", request.sequence));
     if directory.exists() {
         std::fs::remove_dir_all(&directory).ok();
     }
     std::fs::create_dir_all(&directory).context("Cannot create the release directory")?;
-    if let Err(exc) = unpack(&archive, &directory).and_then(|_| check_identity(&directory, request)) {
+    if let Err(exc) = unpack(&archive, &directory).and_then(|_| check_identity(&directory, request))
+    {
         std::fs::remove_dir_all(&directory).ok();
         return Err(exc);
     }
@@ -84,7 +87,9 @@ where
         Ok(()) => {}
         Err(exc) => {
             rollback(&root, &previous, &restart, &state_path, &mut state, exc)?;
-            bail!(AgentError::new("New provider version did not become healthy"));
+            bail!(AgentError::new(
+                "New provider version did not become healthy"
+            ));
         }
     }
     if !health(config, request, old_boot.as_deref()) {
@@ -96,7 +101,9 @@ where
             &mut state,
             anyhow::anyhow!("New provider version did not become healthy"),
         )?;
-        bail!(AgentError::new("New provider version did not become healthy"));
+        bail!(AgentError::new(
+            "New provider version did not become healthy"
+        ));
     }
     state["pending"] = json!(false);
     state["status"] = json!("active");
@@ -177,7 +184,8 @@ pub fn fetch_release(config: &UpdaterConfig, request: &Request) -> Result<PathBu
         &metadata,
         &timestamp_signed["snapshot_meta"],
     )?;
-    let snapshot: Value = serde_json::from_slice(&snapshot_bytes).context("Invalid snapshot metadata")?;
+    let snapshot: Value =
+        serde_json::from_slice(&snapshot_bytes).context("Invalid snapshot metadata")?;
     let snapshot_signed = tuf::verify(&snapshot, "snapshot", &trust)?;
     let targets_bytes = fetch_bytes(
         &client,
@@ -186,14 +194,23 @@ pub fn fetch_release(config: &UpdaterConfig, request: &Request) -> Result<PathBu
         &metadata,
         &snapshot_signed["meta"]["targets.json"],
     )?;
-    let targets: Value = serde_json::from_slice(&targets_bytes).context("Invalid targets metadata")?;
+    let targets: Value =
+        serde_json::from_slice(&targets_bytes).context("Invalid targets metadata")?;
     let targets_signed = tuf::verify(&targets, "targets", &trust)?;
     let Some(entry) = targets_signed["targets"].get(&request.target) else {
-        bail!(AgentError::new("Assigned update does not match signed release metadata"));
+        bail!(AgentError::new(
+            "Assigned update does not match signed release metadata"
+        ));
     };
-    let custom_matches = entry.get("custom").and_then(|c| c.get("version")).and_then(|v| v.as_str())
+    let custom_matches = entry
+        .get("custom")
+        .and_then(|c| c.get("version"))
+        .and_then(|v| v.as_str())
         == Some(request.version.as_str())
-        && entry.get("custom").and_then(|c| c.get("sequence")).and_then(|v| v.as_i64())
+        && entry
+            .get("custom")
+            .and_then(|c| c.get("sequence"))
+            .and_then(|v| v.as_i64())
             == Some(request.sequence);
     if !custom_matches {
         bail!(AgentError::new(
@@ -209,7 +226,9 @@ pub fn fetch_release(config: &UpdaterConfig, request: &Request) -> Result<PathBu
     if expected_length != Some(body.len() as u64)
         || expected_hash != Some(tuf::sha256_hex(&body).as_str())
     {
-        bail!(AgentError::new("Downloaded release differs from signed metadata"));
+        bail!(AgentError::new(
+            "Downloaded release differs from signed metadata"
+        ));
     }
     let destination = downloads.join(request.target.replace('/', "_"));
     atomic_bytes(&destination, &body, 0o600)?;
@@ -237,9 +256,14 @@ fn fetch_bytes(
 ) -> Result<Vec<u8>> {
     let bytes = raw_fetch(client, base, &format!("metadata/{name}"))?;
     let length = expected.get("length").and_then(|v| v.as_u64());
-    let hash = expected.get("hashes").and_then(|h| h.get("sha256")).and_then(|v| v.as_str());
+    let hash = expected
+        .get("hashes")
+        .and_then(|h| h.get("sha256"))
+        .and_then(|v| v.as_str());
     if length != Some(bytes.len() as u64) || hash != Some(tuf::sha256_hex(&bytes).as_str()) {
-        bail!(AgentError::new("Metadata differs from its signed description"));
+        bail!(AgentError::new(
+            "Metadata differs from its signed description"
+        ));
     }
     atomic_bytes(&cache.join(name), &bytes, 0o600)?;
     Ok(bytes)
@@ -257,9 +281,15 @@ fn raw_fetch(client: &reqwest::blocking::Client, base: &str, path: &str) -> Resu
         .send()
         .with_context(|| format!("Cannot download {url}"))?;
     if !response.status().is_success() {
-        bail!(AgentError::new(format!("Cannot download {url}: HTTP {}", response.status())));
+        bail!(AgentError::new(format!(
+            "Cannot download {url}: HTTP {}",
+            response.status()
+        )));
     }
-    Ok(response.bytes().with_context(|| format!("Cannot read {url}"))?.to_vec())
+    Ok(response
+        .bytes()
+        .with_context(|| format!("Cannot read {url}"))?
+        .to_vec())
 }
 
 /// アーカイブの安全な展開（許可リスト・サイズ上限つき）。
@@ -268,7 +298,10 @@ pub fn unpack(archive_path: &Path, destination: &Path) -> Result<()> {
     let decoder = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
     let mut total: u64 = 0;
-    for entry in archive.entries().context("Cannot read the release archive")? {
+    for entry in archive
+        .entries()
+        .context("Cannot read the release archive")?
+    {
         let mut entry = entry.context("Cannot read the release archive")?;
         let path = entry.path()?.into_owned();
         let name = path.to_string_lossy().to_string();
@@ -298,7 +331,11 @@ pub fn unpack(archive_path: &Path, destination: &Path) -> Result<()> {
         }
         let mut output = std::fs::File::create(&target).context("Cannot write the release file")?;
         std::io::copy(&mut entry, &mut output).context("Cannot write the release file")?;
-        let mode = if path.extension().is_some_and(|ext| ext == "sh") { 0o755 } else { 0o644 };
+        let mode = if path.extension().is_some_and(|ext| ext == "sh") {
+            0o755
+        } else {
+            0o644
+        };
         crate::support::files::fs_set_mode(&target, mode)?;
     }
     Ok(())
@@ -309,17 +346,24 @@ fn check_identity(directory: &Path, request: &Request) -> Result<()> {
         .context("Release is missing its identity")?;
     let identity: Value = serde_json::from_str(&raw).context("Release identity is invalid")?;
     if identity != json!({"version": request.version, "sequence": request.sequence}) {
-        bail!(AgentError::new("Release identity differs from the signed assignment"));
+        bail!(AgentError::new(
+            "Release identity differs from the signed assignment"
+        ));
     }
     Ok(())
 }
 
 fn runtime_permissions(destination: &Path) -> Result<()> {
-    crate::support::files::fs_set_mode(&destination.parent().unwrap_or(destination).join("releases"), 0o755)?;
+    crate::support::files::fs_set_mode(
+        &destination.parent().unwrap_or(destination).join("releases"),
+        0o755,
+    )?;
     let mut stack = vec![destination.to_path_buf()];
     while let Some(directory) = stack.pop() {
         crate::support::files::fs_set_mode(&directory, 0o755)?;
-        let Ok(entries) = std::fs::read_dir(&directory) else { continue };
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -353,13 +397,17 @@ fn symlink(target: &Path, link: &Path) -> Result<()> {
 fn read_boot_id(state_dir: &Path) -> Option<String> {
     let raw = std::fs::read_to_string(state_dir.join("health.json")).ok()?;
     let value: Value = serde_json::from_str(&raw).ok()?;
-    value.get("boot_id").and_then(|v| v.as_str()).map(str::to_string)
+    value
+        .get("boot_id")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }
 
 /// ヘルス確認（Python 版 _health 相当）。
 pub fn health(config: &UpdaterConfig, request: &Request, old_boot: Option<&str>) -> bool {
     let path = PathBuf::from(&config.provider_state).join("health.json");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(config.health_timeout);
+    let deadline =
+        std::time::Instant::now() + std::time::Duration::from_secs(config.health_timeout);
     while std::time::Instant::now() < deadline {
         if health_matches(&path, request, old_boot, chrono::Utc::now().timestamp()) {
             return true;
@@ -371,8 +419,12 @@ pub fn health(config: &UpdaterConfig, request: &Request, old_boot: Option<&str>)
 
 /// 1 回分のヘルス判定（テスト対象）。
 pub fn health_matches(path: &Path, request: &Request, old_boot: Option<&str>, now: i64) -> bool {
-    let Ok(raw) = std::fs::read_to_string(path) else { return false };
-    let Ok(value) = serde_json::from_str::<Value>(&raw) else { return false };
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&raw) else {
+        return false;
+    };
     if value.get("healthy").and_then(|v| v.as_bool()) != Some(true) {
         return false;
     }
@@ -403,7 +455,11 @@ pub fn run(config_path: &Path, request_path: Option<&Path>) -> Result<Option<Val
     };
     let service = config.service.clone();
     let result = install(&config, &request, |name| {
-        let name = if name.is_empty() { service.as_str() } else { name };
+        let name = if name.is_empty() {
+            service.as_str()
+        } else {
+            name
+        };
         if !crate::support::repo::valid_service_name(name) {
             bail!(AgentError::new("Invalid provider service name"));
         }
@@ -425,7 +481,11 @@ mod tests {
     use super::*;
 
     fn request() -> Request {
-        Request { target: "provider/00000001-1.0.0.tar.gz".into(), version: "1.0.0".into(), sequence: 1 }
+        Request {
+            target: "provider/00000001-1.0.0.tar.gz".into(),
+            version: "1.0.0".into(),
+            sequence: 1,
+        }
     }
 
     /// 悪意ある配置物を再現するため、名前バイト列を直接書き込む。
@@ -452,11 +512,8 @@ mod tests {
     #[test]
     fn unpack_accepts_allowlisted_paths_only() {
         let scratch = tempfile::tempdir().unwrap();
-        let archive = build_release_archive(
-            scratch.path(),
-            "crates/demo/src/main.rs",
-            b"fn main() {}\n",
-        );
+        let archive =
+            build_release_archive(scratch.path(), "crates/demo/src/main.rs", b"fn main() {}\n");
         let destination = tempfile::tempdir().unwrap();
         unpack(&archive, destination.path()).unwrap();
         assert!(destination.path().join("crates/demo/src/main.rs").exists());
@@ -487,9 +544,15 @@ mod tests {
         std::fs::create_dir_all(&first).unwrap();
         std::fs::create_dir_all(&second).unwrap();
         switch_link(root.path(), &first).unwrap();
-        assert_eq!(std::fs::canonicalize(root.path().join("current")).unwrap(), first);
+        assert_eq!(
+            std::fs::canonicalize(root.path().join("current")).unwrap(),
+            first
+        );
         switch_link(root.path(), &second).unwrap();
-        assert_eq!(std::fs::canonicalize(root.path().join("current")).unwrap(), second);
+        assert_eq!(
+            std::fs::canonicalize(root.path().join("current")).unwrap(),
+            second
+        );
     }
 
     #[test]
@@ -533,7 +596,9 @@ mod tests {
     #[test]
     fn missing_request_file_is_a_no_op() {
         let directory = tempfile::tempdir().unwrap();
-        assert!(load_request(&directory.path().join("desired-release.json")).unwrap().is_none());
+        assert!(load_request(&directory.path().join("desired-release.json"))
+            .unwrap()
+            .is_none());
         let path = directory.path().join("desired-release.json");
         std::fs::write(&path, "null").unwrap();
         assert!(load_request(&path).unwrap().is_none());

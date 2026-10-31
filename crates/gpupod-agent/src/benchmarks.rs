@@ -18,9 +18,7 @@ pub fn timestamp() -> String {
 
 /// 丸め。Python 版 round(value, digits) と同じ（小数第 n 位で四捨五入）。
 fn rounded(value: f64, digits: usize) -> f64 {
-    format!("{value:.digits$}")
-        .parse::<f64>()
-        .unwrap_or(value)
+    format!("{value:.digits$}").parse::<f64>().unwrap_or(value)
 }
 
 /// 測定値の検証。既知の範囲だけを通す。
@@ -62,14 +60,24 @@ pub fn public_results(value: &serde_json::Value, now: Option<DateTime<Utc>>) -> 
                 Some(serde_json::Value::Number(number)) => number.as_u64()?,
                 _ => return None,
             };
-            let limit = if kind == "disk" { 4096 * MIB } else { MAX_NETWORK_BYTES };
+            let limit = if kind == "disk" {
+                4096 * MIB
+            } else {
+                MAX_NETWORK_BYTES
+            };
             if !(MIB..=limit).contains(&size) {
                 return None;
             }
             let mut clean = serde_json::Map::new();
-            clean.insert("measured_at".into(), serde_json::Value::String(measured.to_rfc3339()));
+            clean.insert(
+                "measured_at".into(),
+                serde_json::Value::String(measured.to_rfc3339()),
+            );
             clean.insert("size_bytes".into(), serde_json::json!(size));
-            clean.insert("size_mib".into(), serde_json::json!(rounded(size as f64 / MIB as f64, 1)));
+            clean.insert(
+                "size_mib".into(),
+                serde_json::json!(rounded(size as f64 / MIB as f64, 1)),
+            );
             clean.insert(
                 "stale".into(),
                 serde_json::json!(now - measured > ChronoDuration::days(7)),
@@ -88,7 +96,10 @@ pub fn public_results(value: &serde_json::Value, now: Option<DateTime<Utc>>) -> 
                     "write_mib_s".into(),
                     serde_json::json!(rounded(measured_number(item.get("write_mib_s"))?, 3)),
                 );
-                clean.insert("method".into(), serde_json::json!("fio-sequential-1MiB-qd1"));
+                clean.insert(
+                    "method".into(),
+                    serde_json::json!("fio-sequential-1MiB-qd1"),
+                );
                 clean.insert("direct_io".into(), serde_json::json!(true));
             } else {
                 if item.get("scope").and_then(|v| v.as_str()) != Some("central") {
@@ -146,7 +157,9 @@ pub fn save_result(
     wrapper.insert(kind.to_owned(), measurement);
     let clean = public_results(&serde_json::Value::Object(wrapper), None);
     let Some(entry) = clean.get(kind).cloned() else {
-        return Err(AgentError::new("Invalid benchmark result; previous measurement retained"));
+        return Err(AgentError::new(
+            "Invalid benchmark result; previous measurement retained",
+        ));
     };
     if let Some(object) = old.as_object_mut() {
         object.insert(kind.to_owned(), entry);

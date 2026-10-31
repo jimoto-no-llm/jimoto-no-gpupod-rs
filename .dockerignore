@@ -1,0 +1,22 @@
+# ビルドに不要なもの、または秘密情報を含みうるものを除外する
+.git
+.github
+.gitignore
+target
+**/target
+.control-state
+.provider-state
+.demo-state
+support-bundles
+release-repository
+.release-keys
+node-*.secret.json
+*.secret.json
+.env
+.env.*
+docs
+images
+examples/nginx.conf
+examples/control.env
+examples/*.json.dist
+*.log

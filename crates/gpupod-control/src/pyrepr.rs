@@ -53,7 +53,9 @@ pub fn repr_string(text: &str) -> String {
             '\t' => out.push_str("\\t"),
             '\u{b}' => out.push_str("\\x0b"),
             '\u{c}' => out.push_str("\\x0c"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32))
+            }
             c => out.push(c),
         }
     }

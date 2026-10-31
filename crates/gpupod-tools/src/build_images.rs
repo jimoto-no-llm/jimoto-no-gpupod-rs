@@ -6,8 +6,12 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 
 /// ビルドする PyTorch バリアント。 indexes は Python 版と同一。
-pub const TORCH_INDEXES: [(&str, &str); 4] =
-    [("cpu", "cpu"), ("cuda", "cu130"), ("rocm", "rocm7.2"), ("xpu", "xpu")];
+pub const TORCH_INDEXES: [(&str, &str); 4] = [
+    ("cpu", "cpu"),
+    ("cuda", "cu130"),
+    ("rocm", "rocm7.2"),
+    ("xpu", "xpu"),
+];
 
 pub const UBUNTU_VERSIONS: [&str; 2] = ["24.04", "26.04"];
 
@@ -78,7 +82,9 @@ mod tests {
     fn unknown_variants_are_rejected() {
         let root = tempfile::tempdir().unwrap();
         // docker が無くてもバリデーションが先に失敗することを確認する。
-        let error = run(&["bogus".to_string()], root.path()).unwrap_err().to_string();
+        let error = run(&["bogus".to_string()], root.path())
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("Unknown PyTorch variant"), "{error}");
     }
 }

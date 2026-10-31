@@ -16,10 +16,16 @@ use crate::support::tuf;
 /// パッケージ対象のディレクトリ（Rust 版リポジトリに合わせた移植）。
 pub const SOURCE_DIRS: [&str; 4] = ["crates", "examples", "images", "docs"];
 /// ルート直下でパッケージするファイル。
-pub const TOP_FILES: [&str; 5] =
-    ["Cargo.toml", "Cargo.lock", "README.md", "verify.yml.example", ".dockerignore"];
-const SUFFIXES: [&str; 9] =
-    [".rs", ".json", ".toml", ".sh", ".conf", ".env", ".md", ".html", ".yml"];
+pub const TOP_FILES: [&str; 5] = [
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "verify.yml.example",
+    ".dockerignore",
+];
+const SUFFIXES: [&str; 9] = [
+    ".rs", ".json", ".toml", ".sh", ".conf", ".env", ".md", ".html", ".yml",
+];
 const SKIP_DIRS: [&str; 3] = ["target", "__pycache__", ".git"];
 
 pub fn expiry(days: i64) -> String {
@@ -36,10 +42,18 @@ pub fn initialize(repository: &Path, keys_dir: &Path) -> Result<()> {
         ));
     }
     if repository.join("metadata/root.json").exists() {
-        bail!(AgentError::new("Refusing to replace an existing update trust root"));
+        bail!(AgentError::new(
+            "Refusing to replace an existing update trust root"
+        ));
     }
-    if keys.read_dir().map(|mut entries| entries.next().is_some()).unwrap_or(false) {
-        bail!(AgentError::new("Refusing to replace an existing update trust root"));
+    if keys
+        .read_dir()
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false)
+    {
+        bail!(AgentError::new(
+            "Refusing to replace an existing update trust root"
+        ));
     }
     ensure_private_dir(&keys)?;
     std::fs::create_dir_all(repository.join("metadata"))?;
@@ -49,7 +63,11 @@ pub fn initialize(repository: &Path, keys_dir: &Path) -> Result<()> {
     let mut roles = serde_json::Map::new();
     for role in tuf::ROLES {
         let (keyid, key) = tuf::generate_keypair();
-        atomic_bytes(&keys.join(format!("{role}.pem")), &tuf::signing_key_to_pem(&key)?, 0o600)?;
+        atomic_bytes(
+            &keys.join(format!("{role}.pem")),
+            &tuf::signing_key_to_pem(&key)?,
+            0o600,
+        )?;
         public.insert(keyid.clone(), tuf::public_key_json(&key));
         roles.insert(role.to_string(), json!([keyid.clone()]));
         signing.insert(role.to_string(), key);
@@ -102,7 +120,10 @@ pub fn write_metadata(repository: &Path, keys_dir: &Path) -> Result<()> {
     };
     targets["signed"]["expires"] = json!(expiry(90));
     let targets_key = load_signing_key(keys_dir, "targets")?;
-    let targets_document = tuf::sign(&targets["signed"], &BTreeMap::from([("targets".to_string(), targets_key)]))?;
+    let targets_document = tuf::sign(
+        &targets["signed"],
+        &BTreeMap::from([("targets".to_string(), targets_key)]),
+    )?;
     let targets_bytes = tuf::document_bytes(&targets_document)?;
     let version = targets_document["signed"]["version"]
         .as_u64()
@@ -121,8 +142,10 @@ pub fn write_metadata(repository: &Path, keys_dir: &Path) -> Result<()> {
         },
     });
     let snapshot_key = load_signing_key(keys_dir, "snapshot")?;
-    let snapshot_document =
-        tuf::sign(&snapshot, &BTreeMap::from([("snapshot".to_string(), snapshot_key)]))?;
+    let snapshot_document = tuf::sign(
+        &snapshot,
+        &BTreeMap::from([("snapshot".to_string(), snapshot_key)]),
+    )?;
     let snapshot_bytes = tuf::document_bytes(&snapshot_document)?;
     let timestamp = json!({
         "spec": "gpupod-tuf-like-1",
@@ -136,8 +159,10 @@ pub fn write_metadata(repository: &Path, keys_dir: &Path) -> Result<()> {
         },
     });
     let timestamp_key = load_signing_key(keys_dir, "timestamp")?;
-    let timestamp_document =
-        tuf::sign(&timestamp, &BTreeMap::from([("timestamp".to_string(), timestamp_key)]))?;
+    let timestamp_document = tuf::sign(
+        &timestamp,
+        &BTreeMap::from([("timestamp".to_string(), timestamp_key)]),
+    )?;
     atomic_bytes(&targets_path, &targets_bytes, 0o644)?;
     atomic_bytes(
         &directory.join("snapshot.json"),
@@ -192,7 +217,9 @@ pub fn package(source: &Path, destination: &Path, version: &str, sequence: i64) 
     for path in &files {
         let metadata = std::fs::symlink_metadata(path).context("Cannot read the release source")?;
         if metadata.file_type().is_symlink() {
-            bail!(AgentError::new("Release sources must not contain symbolic links"));
+            bail!(AgentError::new(
+                "Release sources must not contain symbolic links"
+            ));
         }
         let relative = path
             .strip_prefix(&source)
@@ -215,7 +242,9 @@ pub fn package(source: &Path, destination: &Path, version: &str, sequence: i64) 
     header.set_mode(0o644);
     header.set_cksum();
     builder.append_data(&mut header, "release.json", body.as_slice())?;
-    let encoder = builder.into_inner().map_err(|exc| anyhow::anyhow!("{exc}"))?;
+    let encoder = builder
+        .into_inner()
+        .map_err(|exc| anyhow::anyhow!("{exc}"))?;
     encoder.finish().map_err(|exc| anyhow::anyhow!("{exc}"))?;
     Ok(())
 }
@@ -284,7 +313,10 @@ fn private_key_line(content: &[u8]) -> bool {
         let mut rest = line;
         if rest.starts_with(b"-----BEGIN ") {
             rest = &rest[b"-----BEGIN ".len()..];
-            let Some(end) = rest.windows(b"PRIVATE KEY-----".len()).position(|w| w == b"PRIVATE KEY-----") else {
+            let Some(end) = rest
+                .windows(b"PRIVATE KEY-----".len())
+                .position(|w| w == b"PRIVATE KEY-----")
+            else {
                 continue;
             };
             let prefix = &rest[..end];
@@ -312,7 +344,11 @@ pub fn publish(
         .as_object()
         .map(|map| {
             map.values()
-                .filter_map(|item| item.get("custom").and_then(|c| c.get("sequence")).and_then(|v| v.as_i64()))
+                .filter_map(|item| {
+                    item.get("custom")
+                        .and_then(|c| c.get("sequence"))
+                        .and_then(|v| v.as_i64())
+                })
                 .max()
                 .unwrap_or(0)
         })
@@ -329,9 +365,7 @@ pub fn publish(
         "hashes": {"sha256": tuf::sha256_hex(&body)},
         "custom": {"version": version, "sequence": sequence},
     });
-    targets["signed"]["version"] = json!(
-        targets["signed"]["version"].as_u64().unwrap_or(0) + 1
-    );
+    targets["signed"]["version"] = json!(targets["signed"]["version"].as_u64().unwrap_or(0) + 1);
     atomic_bytes(&targets_path, &tuf::document_bytes(&targets)?, 0o644)?;
     write_metadata(&repository, keys_dir)?;
     Ok(json!({"version": version, "sequence": sequence, "target": target_name}))
@@ -343,8 +377,7 @@ pub fn refresh(repository: &Path, keys_dir: &Path) -> Result<()> {
     let _lock = HeldLock::exclusive(&repository.join("publish.lock"), 10)?;
     let targets_path = repository.join("metadata/targets.json");
     let mut targets = tuf::read_document(&targets_path)?;
-    targets["signed"]["version"] =
-        json!(targets["signed"]["version"].as_u64().unwrap_or(0) + 1);
+    targets["signed"]["version"] = json!(targets["signed"]["version"].as_u64().unwrap_or(0) + 1);
     atomic_bytes(&targets_path, &tuf::document_bytes(&targets)?, 0o644)?;
     write_metadata(&repository, keys_dir)
 }
@@ -374,7 +407,11 @@ mod tests {
         std::fs::create_dir_all(root.join("crates/gpupod-agent/src")).unwrap();
         std::fs::create_dir_all(root.join("examples")).unwrap();
         std::fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
-        std::fs::write(root.join("crates/gpupod-agent/src/main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(
+            root.join("crates/gpupod-agent/src/main.rs"),
+            "fn main() {}\n",
+        )
+        .unwrap();
         std::fs::write(root.join("examples/templates.json"), "[]\n").unwrap();
         std::fs::write(root.join("README.md"), "# gpupod\n").unwrap();
         std::mem::forget(directory);
@@ -394,7 +431,9 @@ mod tests {
     #[test]
     fn private_key_material_is_detected() {
         assert!(contains_private_key(b"-----BEGIN PRIVATE KEY-----\nabc\n"));
-        assert!(contains_private_key(b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n"));
+        assert!(contains_private_key(
+            b"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n"
+        ));
         assert!(!contains_private_key(b"public info\n"));
         assert!(!contains_private_key(b"-----BEGIN CERTIFICATE-----\nabc\n"));
     }
@@ -408,13 +447,18 @@ mod tests {
         let trust = root_trust(&root).unwrap();
         assert_eq!(trust.roles["root"].len(), 1);
         for name in ["targets.json", "snapshot.json", "timestamp.json"] {
-            let document = tuf::read_document(&repository.path().join("metadata").join(name)).unwrap();
+            let document =
+                tuf::read_document(&repository.path().join("metadata").join(name)).unwrap();
             let role = name.trim_end_matches(".json");
             let outcome = verify(&document, role, &trust);
             assert!(outcome.is_ok(), "{name}: {:#}", outcome.unwrap_err());
         }
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(keys.path().join("root.pem")).unwrap().permissions().mode() & 0o777;
+        let mode = std::fs::metadata(keys.path().join("root.pem"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(mode, 0o600);
         assert!(initialize(repository.path(), keys.path()).is_err());
     }
@@ -463,11 +507,16 @@ mod tests {
         initialize(repository.path(), keys.path()).unwrap();
         let source = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(source.path().join("crates")).unwrap();
-        std::fs::write(source.path().join("crates/leak.rs"), "-----BEGIN PRIVATE KEY-----\nabc\n")
-            .unwrap();
-        assert!(publish(repository.path(), keys.path(), source.path(), "1.0.0", 1)
-            .unwrap_err()
-            .to_string()
-            .contains("Private key"));
+        std::fs::write(
+            source.path().join("crates/leak.rs"),
+            "-----BEGIN PRIVATE KEY-----\nabc\n",
+        )
+        .unwrap();
+        assert!(
+            publish(repository.path(), keys.path(), source.path(), "1.0.0", 1)
+                .unwrap_err()
+                .to_string()
+                .contains("Private key")
+        );
     }
 }

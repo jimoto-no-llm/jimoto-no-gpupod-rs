@@ -1,0 +1,77 @@
+{% extends "site/base.html" %}
+{% block title %}料金 — Jimoto GPU Pod{% endblock %}
+{% block description %}Jimoto GPU Pod の料金。利用料金はかかりません。運営は課金を行いません。{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+  <div class="container page-hero-inner">
+    <h1 class="page-title">料金</h1>
+    <p class="page-lead">利用料金はかかりません。Jimoto GPU Pod は無料で提供しており、課金の予定もありません。</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container pricing-layout">
+    <div class="price-panel price-panel-lg" aria-label="料金">
+      <p class="price-label">利用料金</p>
+      <p class="price-value">0<span class="price-unit">円</span></p>
+      <ul class="price-points">
+        <li>月額料金なし</li>
+        <li>時間課金なし</li>
+        <li>登録料・手数料なし</li>
+      </ul>
+      <p class="price-note">提供者の空き時間を使うため、稼働時間や性能を保証するものではありません。</p>
+    </div>
+    <div class="price-copy">
+      <h2>なぜ無料なのか</h2>
+      <p>提供者が自分のPCの空き時間を開放し、それを必要とする人が使う。Jimoto GPU Pod は、その相互扶助だけで成り立つ仕組みです。運営が間に入ってお金をやり取りすることはありません。</p>
+      <p>無料であっても、利用規約への同意と Discord サーバーへの参加は必要です。提供PCの都合で実行が終了する場合があり、稼働時間や性能の保証はありません。</p>
+    </div>
+  </div>
+</section>
+
+<section class="section section-tinted">
+  <div class="container">
+    <div class="section-head">
+      <h2>お金の扱い</h2>
+      <p class="section-lead">運営は利用者からも提供者からもお金を受け取りません。提供者へ支払うこともありません。</p>
+    </div>
+    <div class="table-scroll">
+      <table class="spec-table">
+        <caption class="visually-hidden">お金の扱い</caption>
+        <thead>
+          <tr><th scope="col">項目</th><th scope="col">扱い</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">利用料金</th><td data-label="扱い">無料</td></tr>
+          <tr><th scope="row">提供者への支払い</th><td data-label="扱い">なし（提供はボランティアベース）</td></tr>
+          <tr><th scope="row">支払い方法の登録</th><td data-label="扱い">不要</td></tr>
+          <tr><th scope="row">課金の予定</th><td data-label="扱い">なし</td></tr>
+          <tr><th scope="row">提供者の実費</th><td data-label="扱い">電気代・通信費・機材費は提供者の負担</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="section-footnote">提供は強制ではありません。負担が大きいと感じた場合は、いつでも受付を OFF にできます。</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cta-panel">
+      <div>
+        <h2>参加には Discord サーバーへの参加が必要です</h2>
+        <p class="section-lead">参加は無料です。招待リンクからサーバーに参加し、Discord でログインしてください。</p>
+      </div>
+      <div class="cta-actions">
+        {% if ctx.has_invite %}
+        <a class="btn btn-primary" href="{{ ctx.invite_url }}" target="_blank" rel="noopener noreferrer">Discord に参加する</a>
+        {% else %}
+        <p class="notice-missing">招待リンクが未設定です。運営に招待リンクを確認してください。</p>
+        {% endif %}
+        <a class="btn btn-ghost" href="/how/">使い方を見る</a>
+      </div>
+    </div>
+    <p class="page-updated">最終更新: {{ updated }}</p>
+  </div>
+</section>
+{% endblock %}

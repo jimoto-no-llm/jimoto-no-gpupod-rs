@@ -115,7 +115,10 @@ pub fn validate_snapshot(value: &NodeSnapshot) -> Result<()> {
     for (key, lease) in &value.leases {
         identifier(key)?;
         let status = lease.get("status").and_then(|v| v.as_str()).unwrap_or("");
-        if !matches!(status, "starting" | "running" | "cleanup_pending" | "stopped") {
+        if !matches!(
+            status,
+            "starting" | "running" | "cleanup_pending" | "stopped"
+        ) {
             return Err(AgentError::new("Invalid lease state"));
         }
         let ports = lease.get("ports");
@@ -131,7 +134,10 @@ pub fn validate_snapshot(value: &NodeSnapshot) -> Result<()> {
                     .as_array()
                     .ok_or_else(|| AgentError::new("Invalid port bindings"))?;
                 for binding in bindings {
-                    let number = binding.get("HostPort").and_then(|v| v.as_str()).unwrap_or("");
+                    let number = binding
+                        .get("HostPort")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
                     if !number.bytes().all(|b| b.is_ascii_digit())
                         || !(1..=65535).contains(&number.parse::<u32>().unwrap_or(0))
                     {
@@ -155,11 +161,17 @@ pub fn validate_snapshot(value: &NodeSnapshot) -> Result<()> {
             .values()
             .filter(|lease| lease.get("status").and_then(|v| v.as_str()) != Some("stopped"))
             .map(|lease| {
-                serde_json::from_value::<Allocation>(lease.get("resources").cloned().unwrap_or_default())
-                    .ok()
+                serde_json::from_value::<Allocation>(
+                    lease.get("resources").cloned().unwrap_or_default(),
+                )
+                .ok()
             })
             .collect();
-        resources::summary(Some(pool), &leases, value.manual_enabled && !value.auto_busy)?;
+        resources::summary(
+            Some(pool),
+            &leases,
+            value.manual_enabled && !value.auto_busy,
+        )?;
     }
     let _ = GPU::from_value;
     Ok(())
@@ -212,7 +224,10 @@ mod tests {
     #[test]
     fn rejects_duplicate_gpus_and_bad_fingerprints() {
         let mut snapshot = minimal();
-        snapshot.gpus = vec![json!({"id": "g1", "vendor": "nvidia"}), json!({"id": "g1", "vendor": "amd"})];
+        snapshot.gpus = vec![
+            json!({"id": "g1", "vendor": "nvidia"}),
+            json!({"id": "g1", "vendor": "amd"}),
+        ];
         assert!(validate_snapshot(&snapshot).is_err());
 
         let mut snapshot = minimal();

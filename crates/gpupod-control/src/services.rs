@@ -37,7 +37,9 @@ impl ServiceError {
 impl From<rusqlite::Error> for ServiceError {
     fn from(value: rusqlite::Error) -> Self {
         match value {
-            rusqlite::Error::SqliteFailure(info, _) if info.code == rusqlite::ErrorCode::ConstraintViolation => {
+            rusqlite::Error::SqliteFailure(info, _)
+                if info.code == rusqlite::ErrorCode::ConstraintViolation =>
+            {
                 ServiceError::Generic
             }
             other => ServiceError::Db(other.to_string()),
@@ -63,7 +65,9 @@ pub fn is_truthy(value: Option<&serde_json::Value>) -> bool {
     match value {
         None | Some(serde_json::Value::Null) => false,
         Some(serde_json::Value::Bool(flag)) => *flag,
-        Some(serde_json::Value::Number(number)) => number.as_f64().map(|v| v != 0.0).unwrap_or(true),
+        Some(serde_json::Value::Number(number)) => {
+            number.as_f64().map(|v| v != 0.0).unwrap_or(true)
+        }
         Some(serde_json::Value::String(text)) => !text.is_empty(),
         Some(serde_json::Value::Array(items)) => !items.is_empty(),
         Some(serde_json::Value::Object(map)) => !map.is_empty(),
@@ -109,7 +113,9 @@ pub fn authenticate_node(
 
 fn valid_rotation_token(token: &str) -> bool {
     (40..=128).contains(&token.len())
-        && token.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        && token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
 /// prepare_rotation。
@@ -127,7 +133,9 @@ pub fn prepare_rotation(
     }
     let digest = token_digest(token);
     if digest_equals(&node.token_hash, &digest) {
-        return Err(ServiceError::agent("The replacement must be a fresh credential"));
+        return Err(ServiceError::agent(
+            "The replacement must be a fresh credential",
+        ));
     }
     let now_value = now();
     let pending_valid = match &node.pending_token_until {
@@ -142,7 +150,9 @@ pub fn prepare_rotation(
         let same_rotation = node.pending_rotation_id.as_deref() == Some(rotation_hex.as_str());
         let same_digest = digest_equals(&node.pending_token_hash, &digest);
         if !same_rotation || !same_digest {
-            return Err(ServiceError::agent("Another credential rotation is pending"));
+            return Err(ServiceError::agent(
+                "Another credential rotation is pending",
+            ));
         }
     }
     conn.execute(
@@ -169,7 +179,9 @@ pub fn commit_rotation(
     let node = models::get_node_enabled(conn, node_id)?.ok_or(ServiceError::Payload)?;
     let digest = token_digest(token);
     let rotation_hex = rotation.simple().to_string();
-    if node.rotation_id.as_deref() == Some(rotation_hex.as_str()) && digest_equals(&node.token_hash, &digest) {
+    if node.rotation_id.as_deref() == Some(rotation_hex.as_str())
+        && digest_equals(&node.token_hash, &digest)
+    {
         return Ok(serde_json::json!({"id": rotation.to_string(), "status": "complete"}));
     }
     let now_value = now();
@@ -184,7 +196,9 @@ pub fn commit_rotation(
         && pending_valid
         && digest_equals(&node.pending_token_hash, &digest);
     if !pending_ok {
-        return Err(ServiceError::agent("Replacement credential was not prepared"));
+        return Err(ServiceError::agent(
+            "Replacement credential was not prepared",
+        ));
     }
     conn.execute(
         "UPDATE portal_node SET previous_token_hash = ?2, previous_token_until = ?3, token_hash = ?4,
@@ -258,10 +272,12 @@ pub fn compatible_templates(
     };
     let mut result = Vec::new();
     for item in models::list_enabled_templates(conn)? {
-        let template = Template::from_value(item.definition.clone()).map_err(|exc| ServiceError::Agent(exc.0))?;
+        let template = Template::from_value(item.definition.clone())
+            .map_err(|exc| ServiceError::Agent(exc.0))?;
         let fingerprint = template.fingerprint();
         if template.vendors.contains(&vendor)
-            && advertised.get(&item.id).and_then(|value| value.as_str()) == Some(fingerprint.as_str())
+            && advertised.get(&item.id).and_then(|value| value.as_str())
+                == Some(fingerprint.as_str())
         {
             result.push(item);
         }
@@ -284,15 +300,27 @@ pub struct Capacity {
 
 /// validate_pool（Python 版はキー集合が完全一致であることを要求する）。
 pub fn validate_pool(value: &serde_json::Value) -> Result<Pool> {
-    let map = value.as_object().ok_or_else(|| ServiceError::agent("Invalid resource pool configuration"))?;
-    let expected = ["memory_bytes", "disk_bytes", "default_memory_bytes", "default_disk_bytes"];
+    let map = value
+        .as_object()
+        .ok_or_else(|| ServiceError::agent("Invalid resource pool configuration"))?;
+    let expected = [
+        "memory_bytes",
+        "disk_bytes",
+        "default_memory_bytes",
+        "default_disk_bytes",
+    ];
     if map.len() != expected.len() || expected.iter().any(|key| !map.contains_key(*key)) {
         return Err(ServiceError::agent("Invalid resource pool configuration"));
     }
     let field = |key: &str| -> Result<u64> {
-        let raw = map.get(key).and_then(|value| value.as_u64()).ok_or_else(|| {
-            ServiceError::agent("RAM must be at least 64 MiB and disk at least 16 MiB, in whole MiB")
-        })?;
+        let raw = map
+            .get(key)
+            .and_then(|value| value.as_u64())
+            .ok_or_else(|| {
+                ServiceError::agent(
+                    "RAM must be at least 64 MiB and disk at least 16 MiB, in whole MiB",
+                )
+            })?;
         resources::size_bytes(raw, key).map_err(|exc| ServiceError::Agent(exc.0))
     };
     let memory_bytes = field("memory_bytes")?;
@@ -300,36 +328,54 @@ pub fn validate_pool(value: &serde_json::Value) -> Result<Pool> {
     let default_memory_bytes = field("default_memory_bytes")?;
     let default_disk_bytes = field("default_disk_bytes")?;
     if default_memory_bytes > memory_bytes || default_disk_bytes > disk_bytes {
-        return Err(ServiceError::agent("Default lease capacity exceeds the configured pool"));
+        return Err(ServiceError::agent(
+            "Default lease capacity exceeds the configured pool",
+        ));
     }
-    Ok(Pool { memory_bytes, disk_bytes, default_memory_bytes, default_disk_bytes })
+    Ok(Pool {
+        memory_bytes,
+        disk_bytes,
+        default_memory_bytes,
+        default_disk_bytes,
+    })
 }
 
 /// allocation（キー集合が memory_bytes / disk_bytes の完全一致を要求）。
 pub fn parse_allocation(value: &serde_json::Value) -> Result<Allocation> {
-    let map = value.as_object().ok_or_else(|| ServiceError::agent("Invalid lease resource allocation"))?;
+    let map = value
+        .as_object()
+        .ok_or_else(|| ServiceError::agent("Invalid lease resource allocation"))?;
     if map.len() != 2 || !map.contains_key("memory_bytes") || !map.contains_key("disk_bytes") {
         return Err(ServiceError::agent("Invalid lease resource allocation"));
     }
     let field = |key: &str| -> Result<u64> {
-        let raw = map.get(key).and_then(|value| value.as_u64()).ok_or_else(|| {
-            ServiceError::agent("RAM must be at least 64 MiB and disk at least 16 MiB, in whole MiB")
-        })?;
+        let raw = map
+            .get(key)
+            .and_then(|value| value.as_u64())
+            .ok_or_else(|| {
+                ServiceError::agent(
+                    "RAM must be at least 64 MiB and disk at least 16 MiB, in whole MiB",
+                )
+            })?;
         resources::size_bytes(raw, key).map_err(|exc| ServiceError::Agent(exc.0))
     };
-    Ok(Allocation { memory_bytes: field("memory_bytes")?, disk_bytes: field("disk_bytes")? })
+    Ok(Allocation {
+        memory_bytes: field("memory_bytes")?,
+        disk_bytes: field("disk_bytes")?,
+    })
 }
 
 /// used_resources: 未停止の貸出の合計（require_all=true で欠落を拒否）。
 fn used_resources(items: Vec<Option<Allocation>>) -> Result<Allocation> {
-    let mut used = Allocation { memory_bytes: 0, disk_bytes: 0 };
+    let mut used = Allocation {
+        memory_bytes: 0,
+        disk_bytes: 0,
+    };
     for item in items {
         match item {
-            None => {
-                return Err(ServiceError::agent(
-                    "An active lease has no resource allocation; return it before configuring a pool",
-                ))
-            }
+            None => return Err(ServiceError::agent(
+                "An active lease has no resource allocation; return it before configuring a pool",
+            )),
             Some(value) => {
                 used.memory_bytes = used.memory_bytes.saturating_add(value.memory_bytes);
                 used.disk_bytes = used.disk_bytes.saturating_add(value.disk_bytes);
@@ -347,8 +393,13 @@ fn snapshot_allocations(snapshot: &serde_json::Value) -> BTreeMap<String, serde_
             if lease.get("status").and_then(|value| value.as_str()) == Some("stopped") {
                 continue;
             }
-            allocations
-                .insert(key.clone(), lease.get("resources").cloned().unwrap_or(serde_json::Value::Null));
+            allocations.insert(
+                key.clone(),
+                lease
+                    .get("resources")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
+            );
         }
     }
     allocations
@@ -402,8 +453,16 @@ pub fn node_resources(conn: &rusqlite::Connection, node: &NodeRow) -> Result<Opt
         default_disk_bytes: pool.default_disk_bytes,
         allocated_memory_bytes: used.memory_bytes,
         allocated_disk_bytes: used.disk_bytes,
-        available_memory_bytes: if accepting { pool.memory_bytes - used.memory_bytes } else { 0 },
-        available_disk_bytes: if accepting { pool.disk_bytes - used.disk_bytes } else { 0 },
+        available_memory_bytes: if accepting {
+            pool.memory_bytes - used.memory_bytes
+        } else {
+            0
+        },
+        available_disk_bytes: if accepting {
+            pool.disk_bytes - used.disk_bytes
+        } else {
+            0
+        },
     }))
 }
 
@@ -418,7 +477,9 @@ pub fn validate_ssh_key(value: &str) -> Result<String> {
     }
     let algorithm = parts[0];
     let encoded = parts[1];
-    let allowed = algorithm.starts_with("ssh-") || algorithm.starts_with("ecdsa-") || algorithm.starts_with("sk-");
+    let allowed = algorithm.starts_with("ssh-")
+        || algorithm.starts_with("ecdsa-")
+        || algorithm.starts_with("sk-");
     if !allowed {
         return Err(ServiceError::agent("Invalid SSH public key"));
     }
@@ -470,7 +531,9 @@ pub fn reserve(
     let tx = immediate(&mut guard)?;
     let node = models::get_node(&tx, &node_hex)?.ok_or(ServiceError::Generic)?;
     if !node.accepting(&fmt_dt(now())) {
-        return Err(ServiceError::agent("この提供PCは現在、新規の貸出を受け付けていません。"));
+        return Err(ServiceError::agent(
+            "この提供PCは現在、新規の貸出を受け付けていません。",
+        ));
     }
     let gpus = node
         .snapshot
@@ -486,9 +549,12 @@ pub fn reserve(
             break;
         }
     }
-    let gpu = found.ok_or_else(|| ServiceError::agent("このGPUは貸出中、または後片付け中です。"))?;
+    let gpu =
+        found.ok_or_else(|| ServiceError::agent("このGPUは貸出中、または後片付け中です。"))?;
     if is_truthy(gpu.get("allocated")) || models::active_lease_exists(&tx, &node_hex, gpu_id)? {
-        return Err(ServiceError::agent("このGPUは貸出中、または後片付け中です。"));
+        return Err(ServiceError::agent(
+            "このGPUは貸出中、または後片付け中です。",
+        ));
     }
     let compatible = compatible_templates(&tx, &node, &gpu)?;
     let template = match compatible.into_iter().find(|item| item.id == template_id) {
@@ -504,10 +570,15 @@ pub fn reserve(
         return Err(ServiceError::agent("Invalid connection mode"));
     }
     if connection_mode == "direct" && node.direct_host().is_empty() {
-        return Err(ServiceError::agent("この提供PCでは直接接続を利用できません。"));
+        return Err(ServiceError::agent(
+            "この提供PCでは直接接続を利用できません。",
+        ));
     }
     let capacity = node_resources(&tx, &node)?;
-    let mut requested = Allocation { memory_bytes: 0, disk_bytes: 0 };
+    let mut requested = Allocation {
+        memory_bytes: 0,
+        disk_bytes: 0,
+    };
     if let Some(capacity) = capacity {
         requested = parse_allocation(&serde_json::json!({
             "memory_bytes": memory_bytes.unwrap_or(capacity.default_memory_bytes),
@@ -516,22 +587,30 @@ pub fn reserve(
         if requested.memory_bytes > capacity.available_memory_bytes
             || requested.disk_bytes > capacity.available_disk_bytes
         {
-            return Err(ServiceError::agent("予約可能なRAMまたはディスク容量が不足しています。"));
+            return Err(ServiceError::agent(
+                "予約可能なRAMまたはディスク容量が不足しています。",
+            ));
         }
     } else if memory_bytes.is_some() || disk_bytes.is_some() {
-        return Err(ServiceError::agent("この提供PCには資源の提供枠が設定されていません。"));
+        return Err(ServiceError::agent(
+            "この提供PCには資源の提供枠が設定されていません。",
+        ));
     }
 
     // 中継ポートの割当（貸出ごとに最大 4 ポート、使用中ポートは除外）。
     let mut tcp_ports: Vec<String> = Vec::new();
     let mut chosen_ports: Vec<i64> = Vec::new();
     if connection_mode == "relay" {
-        let definition =
-            Template::from_value(template.definition.clone()).map_err(|exc| ServiceError::Agent(exc.0))?;
+        let definition = Template::from_value(template.definition.clone())
+            .map_err(|exc| ServiceError::Agent(exc.0))?;
         if definition.ports.len() > 4 {
             return Err(ServiceError::agent("中央中継は貸出ごとに最大4ポートです。"));
         }
-        tcp_ports = definition.ports.into_iter().filter(|port| port.ends_with("/tcp")).collect();
+        tcp_ports = definition
+            .ports
+            .into_iter()
+            .filter(|port| port.ends_with("/tcp"))
+            .collect();
         let used = models::used_relay_ports(&tx)?;
         let available: Vec<i64> = (cfg.relay_port_min as i64..=cfg.relay_port_max as i64)
             .filter(|port| !used.contains(port) && *port != cfg.relay_port as i64)
@@ -606,7 +685,13 @@ pub fn control_node(db: &crate::db::SharedDb, node_hex: &str, action: Option<&st
     let action = action.unwrap_or("");
     if action == "rotate" {
         let guard = db.lock();
-        models::insert_command(&guard, node_hex, None, "rotate_token", &serde_json::json!({}))?;
+        models::insert_command(
+            &guard,
+            node_hex,
+            None,
+            "rotate_token",
+            &serde_json::json!({}),
+        )?;
         return Ok(());
     }
     if !matches!(action, "on" | "drain" | "stop") {
@@ -638,8 +723,14 @@ pub fn control_node(db: &crate::db::SharedDb, node_hex: &str, action: Option<&st
 
 /// Python 版 validate_snapshot（生 JSON に対する忠実な検証）。
 pub fn validate_snapshot(value: &serde_json::Value) -> Result<()> {
-    let object = value.as_object().ok_or_else(|| ServiceError::agent("Invalid node snapshot"))?;
-    if object.get("accepting").and_then(|value| value.as_bool()).is_none() {
+    let object = value
+        .as_object()
+        .ok_or_else(|| ServiceError::agent("Invalid node snapshot"))?;
+    if object
+        .get("accepting")
+        .and_then(|value| value.as_bool())
+        .is_none()
+    {
         return Err(ServiceError::agent("Invalid node snapshot"));
     }
     let node_id = object
@@ -692,8 +783,14 @@ pub fn validate_snapshot(value: &serde_json::Value) -> Result<()> {
         if !lease.is_object() {
             return Err(ServiceError::agent("Invalid lease state"));
         }
-        let status = lease.get("status").and_then(|value| value.as_str()).unwrap_or("");
-        if !matches!(status, "starting" | "running" | "cleanup_pending" | "stopped") {
+        let status = lease
+            .get("status")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if !matches!(
+            status,
+            "starting" | "running" | "cleanup_pending" | "stopped"
+        ) {
             return Err(ServiceError::agent("Invalid lease state"));
         }
         let ports = match lease.get("ports") {
@@ -705,8 +802,9 @@ pub fn validate_snapshot(value: &serde_json::Value) -> Result<()> {
             if bindings.is_null() {
                 continue;
             }
-            let bindings =
-                bindings.as_array().ok_or_else(|| ServiceError::agent("Invalid port bindings"))?;
+            let bindings = bindings
+                .as_array()
+                .ok_or_else(|| ServiceError::agent("Invalid port bindings"))?;
             for binding in bindings {
                 if !binding.is_object() {
                     return Err(ServiceError::Payload);
@@ -737,9 +835,19 @@ pub fn validate_snapshot(value: &serde_json::Value) -> Result<()> {
         gpupod_common::identifier::endpoint_host(host).map_err(|exc| ServiceError::Agent(exc.0))?;
     }
 
-    if !object.get("resource_pool").map(|value| value.is_null()).unwrap_or(true) {
-        let manual = object.get("manual_enabled").and_then(|value| value.as_bool()).is_some();
-        let auto_busy = object.get("auto_busy").and_then(|value| value.as_bool()).is_some();
+    if !object
+        .get("resource_pool")
+        .map(|value| value.is_null())
+        .unwrap_or(true)
+    {
+        let manual = object
+            .get("manual_enabled")
+            .and_then(|value| value.as_bool())
+            .is_some();
+        let auto_busy = object
+            .get("auto_busy")
+            .and_then(|value| value.as_bool())
+            .is_some();
         if !manual || !auto_busy {
             return Err(ServiceError::agent("Invalid resource availability state"));
         }
@@ -780,7 +888,11 @@ pub fn sync_node(
     let mut guard = db.lock();
     let tx = immediate(&mut guard)?;
     let node = models::get_node(&tx, &node.id)?.ok_or(ServiceError::Payload)?;
-    let stored_empty = node.snapshot.as_object().map(|map| map.is_empty()).unwrap_or(true);
+    let stored_empty = node
+        .snapshot
+        .as_object()
+        .map(|map| map.is_empty())
+        .unwrap_or(true);
     let stored_id = node.snapshot.get("node_id").cloned();
     let new_id = state.get("node_id").cloned();
     if !stored_empty && stored_id != new_id {
@@ -791,7 +903,10 @@ pub fn sync_node(
     models::save_node_snapshot(&tx, &node.id, state, &statistics, &fmt_dt(now()))?;
 
     for result in &results {
-        let raw_id = result.get("id").and_then(|value| value.as_str()).ok_or(ServiceError::Payload)?;
+        let raw_id = result
+            .get("id")
+            .and_then(|value| value.as_str())
+            .ok_or(ServiceError::Payload)?;
         // エージェントは str(uuid) 形式（ハイフン付き）で返す。DB は 32 桁 hex。
         let id = models::uuid_to_hex(raw_id).ok_or(ServiceError::Payload)?;
         let command = match models::get_pending_command(&tx, &id, &node.id)? {
@@ -801,7 +916,10 @@ pub fn sync_node(
         models::mark_command_done(&tx, &id, result)?;
         if command.kind == "start" && !is_truthy(result.get("ok")) {
             if let Some(lease_hex) = command.lease_id.clone() {
-                let local = state.get("leases").and_then(|value| value.get(&lease_hex)).cloned();
+                let local = state
+                    .get("leases")
+                    .and_then(|value| value.get(&lease_hex))
+                    .cloned();
                 if local.is_none() {
                     let error_value = match result.get("error") {
                         None | Some(serde_json::Value::Null) => "Start failed".to_string(),
@@ -824,25 +942,32 @@ pub fn sync_node(
         .and_then(|value| value.as_object())
         .cloned()
         .unwrap_or_default();
-    let has_pool = !state.get("resource_pool").map(|value| value.is_null()).unwrap_or(true);
+    let has_pool = !state
+        .get("resource_pool")
+        .map(|value| value.is_null())
+        .unwrap_or(true);
     for mut lease in models::list_node_active_leases(&tx, &node.id)? {
         let local = match state_leases.get(&lease.id) {
             None => continue,
             Some(local) => local.clone(),
         };
         if local.get("gpu_id").and_then(|value| value.as_str()) != Some(lease.gpu_id.as_str())
-            || local.get("template_id").and_then(|value| value.as_str()) != Some(lease.template_id.as_str())
+            || local.get("template_id").and_then(|value| value.as_str())
+                != Some(lease.template_id.as_str())
         {
             return Err(ServiceError::agent("Lease identity mismatch"));
         }
-        if lease.memory_bytes == 0 && lease.disk_bytes == 0 && has_pool && is_truthy(local.get("resources")) {
+        if lease.memory_bytes == 0
+            && lease.disk_bytes == 0
+            && has_pool
+            && is_truthy(local.get("resources"))
+        {
             let observed = parse_allocation(local.get("resources").unwrap())?;
             lease.memory_bytes = observed.memory_bytes as i64;
             lease.disk_bytes = observed.disk_bytes as i64;
         }
         if lease.memory_bytes != 0 || lease.disk_bytes != 0 {
-            let expected =
-                serde_json::json!({"memory_bytes": lease.memory_bytes, "disk_bytes": lease.disk_bytes});
+            let expected = serde_json::json!({"memory_bytes": lease.memory_bytes, "disk_bytes": lease.disk_bytes});
             if local.get("resources") != Some(&expected) {
                 return Err(ServiceError::agent("Lease resource allocation mismatch"));
             }

@@ -1,5 +1,8 @@
-```
 # Jimoto GPU Pod (Rust)
+
+[![CI](https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/actions/workflows/ci.yml)
+[![Dependency audit](https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/actions/workflows/audit.yml/badge.svg)](https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/actions/workflows/audit.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs)
 
 Linux の提供者 PC の GPU を、承認済み Docker テンプレートで貸し出すためのソフトウェアです。
 中央サーバーに認証付き WebUI、提供 PC にアウトバウンド接続のエージェントを置きます。
@@ -95,6 +98,51 @@ GPUPOD_TRUST_PROXY=1 はプロキシが X-Forwarded-Proto を上書きする構�
 
 中央の状態、セッション署名鍵、中継 SSH ホスト鍵は .control-state/ に永続化します。
 GPUPOD_CONTROL_STATE で保存先を変えられます。
+
+## ログイン（Discord OAuth）
+
+利用者は Discord でログインします。**参加は誰でも可能**ですが、
+**Discord サーバー（ID 1551195569429422202）への参加が必須**です。
+未参加のままログインしようとすると、参加手順と招待リンクを表示する案内ページになります。
+
+Discord 側の準備:
+
+1. Discord Developer Portal でアプリケーションを作成する
+2. OAuth2 → Redirects に `{GPUPOD_PUBLIC_BASE_URL}/oauth/discord/callback` を登録する
+3. スコープは `identify email guilds`
+4. Client ID と Client Secret を環境変数へ設定する
+
+```bash
+GPUPOD_DISCORD_CLIENT_ID=...
+GPUPOD_DISCORD_CLIENT_SECRET=...
+GPUPOD_PUBLIC_BASE_URL=https://gpu.example.org
+GPUPOD_DISCORD_GUILD_ID=1551195569429422202
+GPUPOD_DISCORD_INVITE_URL=https://discord.gg/xxxxxxx
+```
+
+`GPUPOD_DISCORD_GUILD_ID` は既定で `1551195569429422202` です。
+`GPUPOD_DISCORD_ALLOWED_ROLE_IDS` を設定すると、指定ロールの保持も必須になります。
+Client ID / Secret が未設定でもサーバーは起動し、パスワードログインのみ利用できます。
+
+## 公開サイト
+
+ログインしていない利用者には LP を、ログイン済みにはダッシュボードを同じ `/` で表示します。
+
+| パス | 内容 |
+| --- | --- |
+| `/` | LP（未ログイン）/ ダッシュボード（ログイン済み） |
+| `/pricing/` | 料金（当面無料） |
+| `/providers/` | 提供者募集 |
+| `/how/` | 使い方 |
+| `/terms/` | 利用規約（叩き台） |
+| `/privacy/` | プライバシーポリシー（叩き台） |
+| `/healthz` | 死活監視 |
+| `/static/site.css` | サイトのスタイル |
+
+LP の「借りられる GPU」は、提供中ノードのスナップショットから
+GPU 名・ベンダー・VRAM・提供者表示名・空き状態だけを表示します（IP や内部 ID は出しません）。
+
+**当面は無料**です。料金ページにもその旨を明記しています。
 
 ## 提供 PC
 
@@ -194,3 +242,81 @@ target/release/gpupod-tools update-agent --config /etc/gpupod/update-options.jso
 cargo build
 cargo test
 ```
+
+## クイックスタート（Docker）
+
+Linux と Docker（Compose v2）があれば、中央サーバーと提供エージェント（GPU はダミー）を
+1 コマンドで起動できます。初回はイメージのビルドに数分かかります。
+
+```bash
+git clone https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs.git
+cd jimoto-no-gpupod-rs
+
+# Docker ソケットのグループ ID を自動設定して起動
+./scripts/compose.sh up -d
+
+# 管理者ユーザーも同時に作る場合（デモ用のローカルパスワード）
+GPUPOD_SUPERUSER_PASSWORD=change-me ./scripts/compose.sh up -d
+```
+
+ブラウザーで <http://localhost:8000/> を開きます。これは**ローカル検証用**の構成です。
+
+- GPU はダミー（mock）で、Docker・SSH・中継・返却は実際に動きます。
+- 貸出を試すには、ホスト側でテンプレートイメージを用意します
+  （`cargo build --release && target/release/gpupod-tools build-images`、またはレジストリから取得）。
+- 状態は Docker ボリューム `gpupod_gpupod-state` に保存します。`./scripts/compose.sh down -v` で消えます。
+- HTTP・Docker ソケットのマウント・ホストネットワークを使うため、インターネットへ公開しないでください。
+  本番は [docs/deploy.md](docs/deploy.md) の VPS 構成を使ってください。
+
+本番相当の構成（VPS 1 台 + systemd + nginx + TLS + ポート 19000〜19999）は
+[docs/deploy.md](docs/deploy.md) にまとめています。
+
+## イベントで使う
+
+イベントでは「中央 1 台 + 提供 PC 数台」で運用します。提供 PC は外向き接続だけで参加でき、
+公開ポートは不要です。
+
+1. **中央を立てる**: [docs/deploy.md](docs/deploy.md)（VPS 1 台、TLS、19000〜19999/TCP の開放）。
+2. **提供 PC を登録する**: 管理パネルの「提供PC管理」で登録し、`node-*.secret.json` を提供者へ渡す。
+3. **提供 PC を準備する**: Docker と GPU ドライバーを入れ、テンプレートイメージをビルドする。
+
+   ```bash
+   target/release/gpupod-tools doctor
+   target/release/gpupod-tools build-images --pytorch cuda   # GPU に合わせて cpu / rocm / xpu
+   target/release/gpupod-agent resources --memory-gib 8 --disk-gib 100 \
+     --default-memory-gib 2 --default-disk-gib 25
+   target/release/gpupod-agent on
+   target/release/gpupod-agent daemon --config node-provider.secret.json
+   ```
+
+4. **受付を ON にする**: 提供 PC 側を ON にしたあと、中央パネルでも受付 ON にする。
+5. **参加者へ案内する**: URL、Discord ログイン、SSH 公開鍵、接続方法（`ssh -p <割当ポート>`）。
+
+当日の受付 ON/OFF、ピーク時の調整、片付け、障害時の確認手順は
+[docs/operations.md](docs/operations.md) にまとめています。
+セキュリティ上の前提と制約は [docs/security.md](docs/security.md) を参照してください。
+
+## ドキュメント
+
+| ドキュメント | 内容 |
+| --- | --- |
+| [docs/usage.md](docs/usage.md) | 利用者・提供者向けの詳しい手順 |
+| [docs/deploy.md](docs/deploy.md) | 本番の VPS 構成（systemd / nginx / TLS / ポート） |
+| [docs/operations.md](docs/operations.md) | イベント当日の運用手順・障害時の確認 |
+| [docs/security.md](docs/security.md) | 脅威モデル・既知の制約・依存の脆弱性 |
+| [docs/development.md](docs/development.md) | 開発環境・CI・コードの決まり |
+| [docs/roadmap.md](docs/roadmap.md) | ロードマップと設計判断 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 開発への参加方法・PR の作法 |
+| [SECURITY.md](SECURITY.md) | 脆弱性の報告先（非公開） |
+
+## 開発への参加
+
+Issue / PR を歓迎します。まず [CONTRIBUTING.md](CONTRIBUTING.md) を読んでください。
+
+```bash
+./scripts/check.sh     # fmt / clippy / test
+```
+
+CI（GitHub Actions）は PR ごとに fmt・clippy・build・test を実行し、
+依存の脆弱性は PR と週次で `cargo audit` により確認します。
+失敗時のログはワークフローのアーティファクトに保存されます。

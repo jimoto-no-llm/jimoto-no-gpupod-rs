@@ -124,8 +124,7 @@ fn main() {
     match run(cli) {
         Ok(code) => std::process::exit(code),
         Err(exc) => {
-            let text =
-                serde_json::to_string(&json!({ "error": exc.0 })).unwrap_or_default();
+            let text = serde_json::to_string(&json!({ "error": exc.0 })).unwrap_or_default();
             eprintln!("{text}");
             std::process::exit(1);
         }
@@ -165,7 +164,9 @@ fn run(cli: Cli) -> Result<i32, AgentError> {
             .as_ref()
             .map(|config| config.limits.clone())
             .unwrap_or_default(),
-        direct_bind: config.as_ref().and_then(|config| config.direct_bind.clone()),
+        direct_bind: config
+            .as_ref()
+            .and_then(|config| config.direct_bind.clone()),
         mock_gpu: cli.mock_gpu,
         runtime: config.as_ref().and_then(|config| config.runtime.clone()),
         ..Default::default()
@@ -203,7 +204,12 @@ fn run(cli: Cli) -> Result<i32, AgentError> {
             )?;
             print_pretty(&summary)?;
         }
-        Command::Start { template, gpu, memory_gib, disk_gib } => {
+        Command::Start {
+            template,
+            gpu,
+            memory_gib,
+            disk_gib,
+        } => {
             let memory_bytes = memory_gib
                 .as_deref()
                 .map(|value| gib_bytes(value, "memory_bytes"))
@@ -221,8 +227,10 @@ fn run(cli: Cli) -> Result<i32, AgentError> {
         Command::Stats => print_pretty(&agent.statistics()?)?,
         Command::Reconcile => print_pretty(&agent.reconcile()?)?,
         Command::Watch { interval } => {
-            if *interval < 1.0 {
-                return Err(AgentError::new("Watch interval must be at least one second"));
+            if !interval.is_finite() || *interval < 1.0 {
+                return Err(AgentError::new(
+                    "Watch interval must be a finite number of at least one second",
+                ));
             }
             loop {
                 agent.reconcile()?;

@@ -9,8 +9,8 @@ use gpupod_common::AgentError;
 
 /// JSON をインデント 2 で改行付きにして原子的に書き込む。
 pub fn atomic_json(path: impl AsRef<Path>, value: &serde_json::Value) -> Result<(), AgentError> {
-    let mut text = serde_json::to_string_pretty(value)
-        .map_err(|exc| AgentError::new(format!("{exc}")))?;
+    let mut text =
+        serde_json::to_string_pretty(value).map_err(|exc| AgentError::new(format!("{exc}")))?;
     text.push('\n');
     atomic_bytes(path, text.as_bytes(), 0o600)
 }
@@ -19,12 +19,15 @@ pub fn atomic_json(path: impl AsRef<Path>, value: &serde_json::Value) -> Result<
 pub fn atomic_bytes(path: impl AsRef<Path>, value: &[u8], mode: u32) -> Result<(), AgentError> {
     let path = path.as_ref();
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)
-        .map_err(|exc| AgentError::new(format!("{exc}")))?;
+    // 既存ディレクトリ（/etc など）の権限は変えない。新規に作った時だけ 0700 にする。
+    let parent_existed = parent.exists();
+    fs::create_dir_all(parent).map_err(|exc| AgentError::new(format!("{exc}")))?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+        if !parent_existed {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+        }
     }
     let temporary = temporary_path(parent, path)?;
     let result = (|| -> std::io::Result<()> {
@@ -66,5 +69,7 @@ fn temporary_path(parent: &Path, path: &Path) -> Result<std::path::PathBuf, Agen
             Err(exc) => return Err(AgentError::new(format!("{exc}"))),
         }
     }
-    Err(AgentError::new("Cannot create a temporary file for the atomic write"))
+    Err(AgentError::new(
+        "Cannot create a temporary file for the atomic write",
+    ))
 }

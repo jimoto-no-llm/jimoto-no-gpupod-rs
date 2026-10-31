@@ -1,0 +1,31 @@
+[Unit]
+Description=Jimoto GPU Pod control server (WebUI, API, SSH relay)
+Documentation=https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/blob/main/docs/deploy.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gpupod
+Group=gpupod
+WorkingDirectory=/var/lib/gpupod
+Environment=GPUPOD_CONTROL_STATE=/var/lib/gpupod/control
+# ドメインや Discord の設定はここに置く（0600, root:gpupod）
+EnvironmentFile=-/etc/gpupod/control.env
+ExecStart=/usr/local/bin/gpupod-control serve --bind 127.0.0.1:8000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+# 中継は 19000-19999 で待ち受けるため、ポート数に合わせて上限を上げる
+LimitNOFILE=65535
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/gpupod
+
+[Install]
+WantedBy=multi-user.target

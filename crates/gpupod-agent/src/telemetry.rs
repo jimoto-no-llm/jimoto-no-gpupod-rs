@@ -13,11 +13,15 @@ use gpupod_common::GPU;
 use crate::devices::run_with_timeout;
 
 fn read_trimmed(path: impl AsRef<Path>) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|text| text.trim().to_owned())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|text| text.trim().to_owned())
 }
 
 fn number(value: Option<String>) -> Option<f64> {
-    value.and_then(|text| text.parse::<f64>().ok()).filter(|value| value.is_finite())
+    value
+        .and_then(|text| text.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
 }
 
 /// /proc/stat の差分から CPU 使用率（%）。初回呼び出しは 0.0（Python 版と同じ）。
@@ -155,8 +159,7 @@ pub fn collect(gpus: &[GPU], disk_path: &Path) -> std::io::Result<Value> {
                     value.insert("utilization_percent".into(), json!(busy));
                 }
                 match number(read_trimmed(root.join("mem_info_vram_used"))) {
-                    Some(used) => value
-                        .insert("memory_used_mib".into(), json!(used / 1_048_576.0)),
+                    Some(used) => value.insert("memory_used_mib".into(), json!(used / 1_048_576.0)),
                     None => value.insert("memory_used_mib".into(), Value::Null),
                 };
             }
@@ -279,7 +282,10 @@ pub struct IdlePolicy {
 
 impl IdlePolicy {
     pub fn new(idle_seconds: f64) -> Self {
-        Self { idle_seconds, idle_since: None }
+        Self {
+            idle_seconds,
+            idle_since: None,
+        }
     }
 
     /// activity が False の連続時間で遊休を判断し、遊休なら true。

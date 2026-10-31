@@ -91,6 +91,35 @@ set +a
 target/release/gpupod-control runrelay
 ```
 
+### Discord ログインの設定
+
+利用者は Discord でログインします。参加は誰でも可能ですが、サーバー ID
+`1551195569429422202` への参加が必須です。未参加の場合は、参加手順と招待リンクを
+表示する案内ページになります（招待リンクは `GPUPOD_DISCORD_INVITE_URL`）。
+
+1. Discord Developer Portal でアプリケーションを作成する
+2. OAuth2 → Redirects に `https://<ドメイン>/oauth/discord/callback` を登録する
+3. スコープは `identify email guilds`
+4. `control.env` に次を設定する
+
+```dotenv
+GPUPOD_DISCORD_CLIENT_ID=あなたのクライアントID
+GPUPOD_DISCORD_CLIENT_SECRET=あなたのクライアントシークレット
+GPUPOD_PUBLIC_BASE_URL=https://gpu.example.org
+GPUPOD_DISCORD_GUILD_ID=1551195569429422202
+GPUPOD_DISCORD_INVITE_URL=https://discord.gg/xxxxxxx
+```
+
+Client ID / Secret が未設定でも起動でき、その場合はパスワードログインのみ使えます。
+特定ロールの保持も必須にする場合は `GPUPOD_DISCORD_ALLOWED_ROLE_IDS` をカンマ区切りで設定します。
+
+### 公開サイト
+
+ログイン前は LP（トップページ）、ログイン後はダッシュボードを同じ `/` で表示します。
+`/pricing/`、`/providers/`、`/how/`、`/terms/`、`/privacy/`、
+`/healthz` を提供します。LP の GPU 一覧は公開情報（GPU 名・ベンダー・VRAM・提供者表示名・空き状態）だけを出します。
+**当面は無料**で、料金ページにもその旨を記載しています。
+
 HTTPS のリバースプロキシには `examples/nginx.conf` を使用できます。ドメイン、証明書、静的ファイルの配置先を実環境に合わせてから導入してください。回線測定用 API の location も含めます。
 
 ブラウザーから `https://gpu.example.org/` を開き、作成した管理者でログインします。簡易管理画面の `/admin/` から利用者アカウントを作成し、通常の利用者にはスタッフ権限を付けません。

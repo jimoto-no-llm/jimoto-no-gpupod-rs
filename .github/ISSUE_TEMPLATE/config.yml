@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: セキュリティ上の問題（非公開で報告）
+    url: https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/security/advisories/new
+    about: 脆弱性・認証回避・情報漏えいは Issue に書かず、こちらから非公開で報告してください。
+  - name: 使い方・運用手順
+    url: https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/blob/main/docs/usage.md
+    about: セットアップ、貸出、SSH 接続、障害時の確認はまず docs/ を確認してください。
+  - name: イベント運営・相談
+    url: https://github.com/jimoto-no-llm/jimoto-no-gpupod-rs/blob/main/docs/operations.md
+    about: イベント当日の受付 ON/OFF、片付け、障害時の確認手順はこちら。

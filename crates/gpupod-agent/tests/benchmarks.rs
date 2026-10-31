@@ -51,9 +51,15 @@ fn rejects_unknown_or_malformed_fields() {
     let moment = now();
 
     // バージョンが違うものは丸ごと無効。
-    assert_eq!(public_results(&json!({"version": 2}), Some(moment)), json!({}));
+    assert_eq!(
+        public_results(&json!({"version": 2}), Some(moment)),
+        json!({})
+    );
     assert_eq!(public_results(&json!({}), Some(moment)), json!({}));
-    assert_eq!(public_results(&json!("not an object"), Some(moment)), json!({}));
+    assert_eq!(
+        public_results(&json!("not an object"), Some(moment)),
+        json!({})
+    );
 
     let cases = vec![
         // 日時が無い・タイムゾーンが無い
@@ -90,7 +96,11 @@ fn rejects_unknown_or_malformed_fields() {
         json!({"version": 1, "disk": "broken"}),
     ];
     for case in cases {
-        assert_eq!(public_results(&case, Some(moment)), json!({}), "case: {case}");
+        assert_eq!(
+            public_results(&case, Some(moment)),
+            json!({}),
+            "case: {case}"
+        );
     }
 }
 
@@ -173,9 +183,12 @@ fn invalid_result_keeps_previous_measurement() {
     assert_eq!(read["network"]["download_mbps"], json!(10.0));
 
     // 不正な結果は拒否され、以前の結果は残る。
-    let error = save_result(temporary.path(), "network", json!({"scope": "central"}))
-        .expect_err("invalid");
-    assert_eq!(error.0, "Invalid benchmark result; previous measurement retained");
+    let error =
+        save_result(temporary.path(), "network", json!({"scope": "central"})).expect_err("invalid");
+    assert_eq!(
+        error.0,
+        "Invalid benchmark result; previous measurement retained"
+    );
     let read = read_results(temporary.path());
     assert_eq!(read["network"]["download_mbps"], json!(10.0));
 

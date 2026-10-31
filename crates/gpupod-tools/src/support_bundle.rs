@@ -54,21 +54,33 @@ fn home_path() -> Regex {
 
 /// Python 版 redact と同じ順序で伏字を入れる。
 pub fn redact(text: &str, secrets: &[String]) -> String {
-    let mut result = private_key().replace_all(text, "[REDACTED PRIVATE KEY]").to_string();
+    let mut result = private_key()
+        .replace_all(text, "[REDACTED PRIVATE KEY]")
+        .to_string();
     let mut ordered: Vec<&String> = secrets.iter().filter(|value| !value.is_empty()).collect();
     ordered.sort_by_key(|value| std::cmp::Reverse(value.len()));
     for value in ordered {
         result = result.replace(value.as_str(), "[REDACTED]");
     }
-    result = ssh_key().replace_all(&result, "[REDACTED SSH KEY]").to_string();
-    result = url_pattern().replace_all(&result, "[REDACTED URL]").to_string();
-    result = home_path().replace_all(&result, "[REDACTED HOME PATH]").to_string();
+    result = ssh_key()
+        .replace_all(&result, "[REDACTED SSH KEY]")
+        .to_string();
+    result = url_pattern()
+        .replace_all(&result, "[REDACTED URL]")
+        .to_string();
+    result = home_path()
+        .replace_all(&result, "[REDACTED HOME PATH]")
+        .to_string();
     let mut lines = Vec::new();
     for line in result.split('\n') {
         if sensitive().is_match(line).unwrap_or(false) {
             lines.push("[REDACTED SENSITIVE LOG LINE]".to_string());
         } else {
-            lines.push(long_value().replace_all(line, "[REDACTED LONG VALUE]").to_string());
+            lines.push(
+                long_value()
+                    .replace_all(line, "[REDACTED LONG VALUE]")
+                    .to_string(),
+            );
         }
     }
     lines.join("\n") + "\n"
@@ -94,8 +106,7 @@ pub fn secret_values(value: &serde_json::Value, sensitive_context: bool) -> Vec<
     match value {
         serde_json::Value::Object(map) => {
             for (key, item) in map {
-                let flagged =
-                    sensitive_context || sensitive().is_match(key).unwrap_or(false);
+                let flagged = sensitive_context || sensitive().is_match(key).unwrap_or(false);
                 result.extend(secret_values(item, flagged));
             }
         }
@@ -150,11 +161,9 @@ fn state_summary(directory: &Path) -> Result<serde_json::Value> {
     if !path.exists() {
         return Ok(serde_json::json!({"available": false}));
     }
-    let connection = rusqlite::Connection::open_with_flags(
-        &path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|exc| AgentError::new(format!("{exc}")))?;
+    let connection =
+        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|exc| AgentError::new(format!("{exc}")))?;
     let row: Option<String> = match connection.query_row(
         "SELECT payload FROM agent_state WHERE id=1 AND length(payload)<=8388608",
         [],
@@ -214,10 +223,9 @@ pub fn resource_summary(state: &serde_json::Value) -> Result<serde_json::Value> 
             match lease.get("resources") {
                 None | Some(serde_json::Value::Null) => allocations.push(None),
                 Some(value) => {
-                    let allocation: resources::Allocation = serde_json::from_value(value.clone())
-                        .map_err(|_| {
-                            AgentError::new("Invalid lease resource allocation")
-                        })?;
+                    let allocation: resources::Allocation =
+                        serde_json::from_value(value.clone())
+                            .map_err(|_| AgentError::new("Invalid lease resource allocation"))?;
                     allocations.push(Some(allocation));
                 }
             }
@@ -328,7 +336,13 @@ pub fn create_bundle(
         serde_json::json!(docker_cli_version()),
     );
     report["dependencies"] = serde_json::Value::Object(dependencies);
-    for (name, collector) in [("state", state_summary as fn(&Path) -> Result<serde_json::Value>), ("health", health_summary)] {
+    for (name, collector) in [
+        (
+            "state",
+            state_summary as fn(&Path) -> Result<serde_json::Value>,
+        ),
+        ("health", health_summary),
+    ] {
         match collector(state_dir) {
             Ok(value) => report[name] = value,
             Err(_) => errors.push(format!("{name} unavailable")),
@@ -359,7 +373,10 @@ pub fn create_bundle(
             }
         }
         let text = String::from_utf8_lossy(slice).to_string();
-        files.push(("provider.log".to_string(), redact(&text, &secrets).into_bytes()));
+        files.push((
+            "provider.log".to_string(),
+            redact(&text, &secrets).into_bytes(),
+        ));
     }
     files.push((
         "README.txt".to_string(),
@@ -371,11 +388,16 @@ pub fn create_bundle(
             .into_bytes(),
     ));
 
-    let parent = output.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     ensure_private_dir(parent)?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent).context("Cannot create a temporary file")?;
+    let mut temporary =
+        tempfile::NamedTempFile::new_in(parent).context("Cannot create a temporary file")?;
     {
-        let encoder = flate2::write::GzEncoder::new(temporary.as_file_mut(), flate2::Compression::default());
+        let encoder =
+            flate2::write::GzEncoder::new(temporary.as_file_mut(), flate2::Compression::default());
         let mut builder = tar::Builder::new(encoder);
         for (name, body) in &files {
             let mut header = tar::Header::new_gnu();
@@ -384,7 +406,9 @@ pub fn create_bundle(
             header.set_cksum();
             builder.append_data(&mut header, name, body.as_slice())?;
         }
-        let mut encoder = builder.into_inner().map_err(|exc| anyhow::anyhow!("{exc}"))?;
+        let mut encoder = builder
+            .into_inner()
+            .map_err(|exc| anyhow::anyhow!("{exc}"))?;
         encoder.flush().ok();
         encoder.finish().map_err(|exc| anyhow::anyhow!("{exc}"))?;
         temporary.as_file().sync_all().ok();
@@ -402,7 +426,10 @@ fn clean_value(value: &serde_json::Value, secrets: &[String]) -> serde_json::Val
                 .collect(),
         ),
         serde_json::Value::Array(items) => serde_json::Value::Array(
-            items.iter().map(|item| clean_value(item, secrets)).collect(),
+            items
+                .iter()
+                .map(|item| clean_value(item, secrets))
+                .collect(),
         ),
         serde_json::Value::String(text) => {
             serde_json::Value::String(redact(text, secrets).trim().to_string())
@@ -501,7 +528,10 @@ mod tests {
 
     #[test]
     fn long_token_like_values_are_removed() {
-        let result = redact("value=aGVsbG8tdGhpcy1pcy1hLWxvbmctdG9rZW4tbGlrZQ== tail\n", &[]);
+        let result = redact(
+            "value=aGVsbG8tdGhpcy1pcy1hLWxvbmctdG9rZW4tbGlrZQ== tail\n",
+            &[],
+        );
         assert!(result.contains("[REDACTED LONG VALUE]"));
         assert!(!result.contains("aGVsbG8tdGhpcy1pcy1hLWxvbmctdG9rZW4tbGlrZQ=="));
         assert!(result.ends_with('\n'));
@@ -587,8 +617,13 @@ mod tests {
             }
         });
         let summary = resource_summary(&state).unwrap();
-        assert_eq!(summary["available"]["memory_bytes"], 6 * 1024 * 1024 * 1024u64);
-        assert!(resource_summary(&serde_json::json!({"leases": {}})).unwrap().is_null());
+        assert_eq!(
+            summary["available"]["memory_bytes"],
+            6 * 1024 * 1024 * 1024u64
+        );
+        assert!(resource_summary(&serde_json::json!({"leases": {}}))
+            .unwrap()
+            .is_null());
     }
 
     #[test]
@@ -598,8 +633,15 @@ mod tests {
         let output = output_dir.path().join("bundle.tar.gz");
         let log = state.path().join("provider.log");
         std::fs::write(&log, "line without secrets\n").unwrap();
-        let created = create_bundle(state.path(), &output, None, Some(&log), Path::new("/var/run/docker.sock"), true)
-            .unwrap();
+        let created = create_bundle(
+            state.path(),
+            &output,
+            None,
+            Some(&log),
+            Path::new("/var/run/docker.sock"),
+            true,
+        )
+        .unwrap();
         use std::os::unix::fs::PermissionsExt;
         let mode = std::fs::metadata(&created).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
@@ -614,6 +656,14 @@ mod tests {
         assert!(names.contains(&"report.json".to_string()));
         assert!(names.contains(&"provider.log".to_string()));
         assert!(names.contains(&"README.txt".to_string()));
-        assert!(create_bundle(state.path(), &output, None, None, Path::new("/var/run/docker.sock"), true).is_err());
+        assert!(create_bundle(
+            state.path(),
+            &output,
+            None,
+            None,
+            Path::new("/var/run/docker.sock"),
+            true
+        )
+        .is_err());
     }
 }

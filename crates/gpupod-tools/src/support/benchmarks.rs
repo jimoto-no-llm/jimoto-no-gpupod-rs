@@ -15,9 +15,14 @@ pub fn timestamp() -> String {
 }
 
 /// 検証済みの公開フィールドだけを返す（任意 JSON をそのまま公開しない）。
-pub fn public_results(value: &serde_json::Value, now: DateTime<Utc>) -> serde_json::Map<String, serde_json::Value> {
+pub fn public_results(
+    value: &serde_json::Value,
+    now: DateTime<Utc>,
+) -> serde_json::Map<String, serde_json::Value> {
     let mut result = serde_json::Map::new();
-    let Some(object) = value.as_object() else { return result };
+    let Some(object) = value.as_object() else {
+        return result;
+    };
     if object.get("version").and_then(|v| v.as_i64()) != Some(1) {
         return result;
     }
@@ -39,7 +44,11 @@ pub fn public_results(value: &serde_json::Value, now: DateTime<Utc>) -> serde_js
         let Some(size) = item.get("size_bytes").and_then(|v| v.as_i64()) else {
             continue;
         };
-        let limit = if kind == "disk" { 4096 * MIB } else { MAX_NETWORK_BYTES };
+        let limit = if kind == "disk" {
+            4096 * MIB
+        } else {
+            MAX_NETWORK_BYTES
+        };
         if size < MIB || size > limit {
             continue;
         }
@@ -117,7 +126,9 @@ pub fn save_result(state_dir: &Path, kind: &str, measurement: &serde_json::Value
     wrapper.insert(kind.to_string(), measurement.clone());
     let clean = public_results(&serde_json::Value::Object(wrapper), Utc::now());
     if !clean.contains_key(kind) {
-        return Err(AgentError::new("Invalid benchmark result; previous measurement retained").into());
+        return Err(
+            AgentError::new("Invalid benchmark result; previous measurement retained").into(),
+        );
     }
     let mut merged = old.as_object().cloned().unwrap_or_default();
     for (key, value) in clean {
@@ -126,8 +137,11 @@ pub fn save_result(state_dir: &Path, kind: &str, measurement: &serde_json::Value
     let mut document = serde_json::Map::new();
     document.insert("version".into(), serde_json::json!(1));
     document.extend(merged);
-    super::files::atomic_json(&state_dir.join("benchmarks.json"), &serde_json::Value::Object(document))
-        .context("Cannot store the benchmark result")
+    super::files::atomic_json(
+        &state_dir.join("benchmarks.json"),
+        &serde_json::Value::Object(document),
+    )
+    .context("Cannot store the benchmark result")
 }
 
 #[cfg(test)]

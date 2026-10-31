@@ -61,7 +61,9 @@ fn parse_iso(value: &str) -> Option<DateTime<Utc>> {
     } else {
         value.to_string()
     };
-    DateTime::parse_from_rfc3339(&normalized).ok().map(|parsed| parsed.with_timezone(&Utc))
+    DateTime::parse_from_rfc3339(&normalized)
+        .ok()
+        .map(|parsed| parsed.with_timezone(&Utc))
 }
 
 /// Python の datetime.isoformat() 相当（秒なら小数なし、+00:00 付き）。
@@ -106,7 +108,9 @@ fn common_fields(
         return None;
     }
     let size = match map.get("size_bytes")? {
-        serde_json::Value::Number(number) if number.is_i64() || number.is_u64() => number.as_u64()?,
+        serde_json::Value::Number(number) if number.is_i64() || number.is_u64() => {
+            number.as_u64()?
+        }
         _ => return None,
     };
     if !(MIB..=kind_max).contains(&size) {
@@ -141,7 +145,8 @@ fn clean_network(item: &serde_json::Value, now_value: DateTime<Utc>) -> Option<P
     if map.get("scope").and_then(|value| value.as_str()) != Some("central") {
         return None;
     }
-    let (measured_at, size_bytes, size_mib, stale) = common_fields(item, MAX_NETWORK_BYTES, now_value)?;
+    let (measured_at, size_bytes, size_mib, stale) =
+        common_fields(item, MAX_NETWORK_BYTES, now_value)?;
     Some(PublicNetwork {
         measured_at,
         size_bytes,
@@ -154,13 +159,21 @@ fn clean_network(item: &serde_json::Value, now_value: DateTime<Utc>) -> Option<P
 }
 
 /// _claim: 条件付き UPDATE でクールダウンを確保する（SQLite でもアトミック）。
-pub fn claim(conn: &rusqlite::Connection, node_hex: &str, direction: &str) -> Result<bool, rusqlite::Error> {
+///
+/// 未知の方向は失敗扱いにする（列名を外部入力から決めない）。
+pub fn claim(
+    conn: &rusqlite::Connection,
+    node_hex: &str,
+    direction: &str,
+) -> Result<bool, rusqlite::Error> {
     let field = match direction {
         "download" => "benchmark_download_after",
-        _ => "benchmark_upload_after",
+        "upload" => "benchmark_upload_after",
+        _ => return Ok(false),
     };
-    let current = fmt_dt(now());
-    let next = fmt_dt(now() + Duration::seconds(BENCHMARK_COOLDOWN_SECONDS));
+    let current_value = now();
+    let current = fmt_dt(current_value);
+    let next = fmt_dt(current_value + Duration::seconds(BENCHMARK_COOLDOWN_SECONDS));
     let updated = conn.execute(
         &format!(
             "UPDATE portal_node SET {field} = ?2

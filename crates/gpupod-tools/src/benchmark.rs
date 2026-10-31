@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use gpupod_common::AgentError;
 use rand::RngCore;
 
-use crate::support::benchmarks::{save_result, MIB, MAX_NETWORK_BYTES};
+use crate::support::benchmarks::{save_result, MAX_NETWORK_BYTES, MIB};
 use crate::support::config::ProviderConfig;
 use crate::support::files::HeldLock;
 use crate::support::telemetry::disk_usage;
@@ -17,11 +17,16 @@ use crate::support::telemetry::disk_usage;
 /// fio で 1MiB QD1 direct I/O の順次読み書きを測る。
 pub fn measure_disk(directory: &Path, size_mib: i64, fio: &str) -> Result<serde_json::Value> {
     if !(16..=4096).contains(&size_mib) {
-        bail!(AgentError::new("Disk sample must be between 16 and 4096 MiB"));
+        bail!(AgentError::new(
+            "Disk sample must be between 16 and 4096 MiB"
+        ));
     }
-    let directory = std::fs::canonicalize(directory).context("Cannot access the measurement directory")?;
+    let directory =
+        std::fs::canonicalize(directory).context("Cannot access the measurement directory")?;
     if !directory.is_dir() {
-        bail!(AgentError::new("The measurement directory needs the sample size plus 256 MiB free"));
+        bail!(AgentError::new(
+            "The measurement directory needs the sample size plus 256 MiB free"
+        ));
     }
     let (_, free) = disk_usage(&directory).map_err(|_| {
         AgentError::new("The measurement directory needs the sample size plus 256 MiB free")
@@ -41,7 +46,9 @@ pub fn measure_disk(directory: &Path, size_mib: i64, fio: &str) -> Result<serde_
         .context("Cannot run fio")?;
     let version = String::from_utf8_lossy(&version.stdout).trim().to_string();
     if !valid_fio_version(&version) {
-        bail!(AgentError::new("The selected command is not the fio 3.x I/O benchmark"));
+        bail!(AgentError::new(
+            "The selected command is not the fio 3.x I/O benchmark"
+        ));
     }
     let mut rates: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
     // 既存ファイル・ブロックデバイス・全体キャッシュを使わない。
@@ -72,17 +79,20 @@ pub fn measure_disk(directory: &Path, size_mib: i64, fio: &str) -> Result<serde_
             .current_dir(temporary.path())
             .output()
             .context("Cannot run fio")?;
-        let parsed: serde_json::Value = serde_json::from_slice(&output.stdout)
-            .map_err(|_| AgentError::new("Disk measurement failed; check fio and direct-I/O filesystem support"))?;
+        let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|_| {
+            AgentError::new("Disk measurement failed; check fio and direct-I/O filesystem support")
+        })?;
         let jobs = parsed
             .get("jobs")
             .and_then(|v| v.as_array())
             .filter(|jobs| jobs.len() == 1)
-            .ok_or_else(|| AgentError::new("fio did not complete the entire sample; previous result retained"))?;
+            .ok_or_else(|| {
+                AgentError::new("fio did not complete the entire sample; previous result retained")
+            })?;
         let job = &jobs[0];
-        let stats = job
-            .get(operation)
-            .ok_or_else(|| AgentError::new("fio did not complete the entire sample; previous result retained"))?;
+        let stats = job.get(operation).ok_or_else(|| {
+            AgentError::new("fio did not complete the entire sample; previous result retained")
+        })?;
         let failed = job.get("error").and_then(|v| v.as_i64()).unwrap_or(1) != 0;
         let io_bytes = stats.get("io_bytes").and_then(|v| v.as_i64()).unwrap_or(0);
         if failed || io_bytes != size_mib * MIB as i64 {
@@ -93,7 +103,11 @@ pub fn measure_disk(directory: &Path, size_mib: i64, fio: &str) -> Result<serde_
         let bw = stats
             .get("bw_bytes")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| AgentError::new("Disk measurement failed; check fio and direct-I/O filesystem support"))?;
+            .ok_or_else(|| {
+                AgentError::new(
+                    "Disk measurement failed; check fio and direct-I/O filesystem support",
+                )
+            })?;
         rates.insert(operation.to_string(), serde_json::json!(bw / MIB as f64));
     }
     Ok(serde_json::json!({
@@ -192,7 +206,9 @@ fn download_sample(
         if started.elapsed() > Duration::from_secs(60) {
             bail!(AgentError::new("Download exceeded its byte/time limit"));
         }
-        let read = response.read(&mut buffer).context("Cannot read the download sample")?;
+        let read = response
+            .read(&mut buffer)
+            .context("Cannot read the download sample")?;
         if read == 0 {
             break;
         }
@@ -258,7 +274,11 @@ impl UploadSample {
     pub fn new(size: usize) -> UploadSample {
         let mut block = vec![0u8; 65536];
         rand::thread_rng().fill_bytes(&mut block);
-        UploadSample { remaining: size, block, offset: 0 }
+        UploadSample {
+            remaining: size,
+            block,
+            offset: 0,
+        }
     }
 }
 
@@ -311,12 +331,16 @@ pub fn main(options: &Options) -> Result<()> {
         results.insert("disk".to_string(), measurement);
     }
     if options.network {
-        let config = crate::support::config::load_provider_config(options.config.as_ref().unwrap())?;
+        let config =
+            crate::support::config::load_provider_config(options.config.as_ref().unwrap())?;
         let measurement = measure_network(&config, options.network_size_mib)?;
         save_result(state_dir, "network", &measurement)?;
         results.insert("network".to_string(), measurement);
     }
-    println!("{}", serde_json::to_string_pretty(&serde_json::Value::Object(results))?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::Value::Object(results))?
+    );
     Ok(())
 }
 
@@ -348,9 +372,13 @@ mod tests {
 
     #[test]
     fn disk_sample_size_is_bounded() {
-        let error = measure_disk(Path::new("/tmp"), 8, "fio").unwrap_err().to_string();
+        let error = measure_disk(Path::new("/tmp"), 8, "fio")
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("between 16 and 4096 MiB"), "{error}");
-        let error = measure_disk(Path::new("/tmp"), 8192, "fio").unwrap_err().to_string();
+        let error = measure_disk(Path::new("/tmp"), 8192, "fio")
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("between 16 and 4096 MiB"), "{error}");
     }
 
@@ -373,7 +401,8 @@ mod tests {
             node_id: "node-1".into(),
             token: "token".into(),
             relay_host: "relay.example.org".into(),
-            relay_host_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFake000000".into(),
+            relay_host_key:
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFake000000".into(),
             direct_host: None,
             direct_bind: None,
             limits: Default::default(),
@@ -412,7 +441,10 @@ mod tests {
             ..Default::default()
         };
         assert!(main(&options).is_err());
-        let options = Options { network: true, ..options };
+        let options = Options {
+            network: true,
+            ..options
+        };
         assert!(main(&options).is_err());
     }
 }

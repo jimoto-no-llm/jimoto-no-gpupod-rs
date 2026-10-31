@@ -70,8 +70,8 @@ fn send_abstract(name: &[u8], payload: &[u8]) -> std::io::Result<usize> {
         for (index, byte) in name.iter().enumerate() {
             address.sun_path[index + 1] = *byte as libc::c_char;
         }
-        let length = (std::mem::offset_of!(libc::sockaddr_un, sun_path) + 1 + name.len())
-            as libc::socklen_t;
+        let length =
+            (std::mem::offset_of!(libc::sockaddr_un, sun_path) + 1 + name.len()) as libc::socklen_t;
         let sent = libc::sendto(
             descriptor,
             payload.as_ptr() as *const libc::c_void,
@@ -176,14 +176,16 @@ impl HealthMonitor {
                 stalled.push(name.to_owned());
             }
         }
-        let healthy = stalled.is_empty()
-            && PROGRESS.iter().all(|name| self.completed.contains(*name));
+        let healthy =
+            stalled.is_empty() && PROGRESS.iter().all(|name| self.completed.contains(*name));
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
         let mut result = self.identity.clone();
-        let object = result.as_object_mut().expect("release identity is an object");
+        let object = result
+            .as_object_mut()
+            .expect("release identity is an object");
         object.insert("pid".into(), json!(std::process::id()));
         object.insert("boot_id".into(), json!(self.boot_id));
         object.insert("updated_at".into(), json!(now));

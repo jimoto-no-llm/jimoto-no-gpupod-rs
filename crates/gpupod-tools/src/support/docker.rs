@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use bollard::exec::{CreateExecOptions, StartExecOptions, StartExecResults};
 use bollard::models::{
-    ContainerWaitResponse, ContainerCreateBody, HostConfig, NetworkCreateRequest,
-    RestartPolicy, RestartPolicyNameEnum, VolumeCreateRequest,
+    ContainerCreateBody, ContainerWaitResponse, HostConfig, NetworkCreateRequest, RestartPolicy,
+    RestartPolicyNameEnum, VolumeCreateRequest,
 };
 use bollard::query_parameters::{
     CreateContainerOptions, CreateImageOptions, InspectContainerOptions, InspectNetworkOptions,
@@ -108,12 +108,16 @@ impl DockerEngine {
                 .await
             {
                 Ok(container) => container,
-                Err(bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }) => {
-                    return Ok(None)
-                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => return Ok(None),
                 Err(exc) => return Err(exc).context("Cannot inspect the container"),
             };
-            check_owner(container.config.as_ref().and_then(|c| c.labels.as_ref()), lease_id, node_id)?;
+            check_owner(
+                container.config.as_ref().and_then(|c| c.labels.as_ref()),
+                lease_id,
+                node_id,
+            )?;
             serde_json::to_value(container)
                 .map(Some)
                 .context("Cannot encode the container description")
@@ -130,12 +134,17 @@ impl DockerEngine {
                     .await
                 {
                     Ok(container) => container,
-                    Err(bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }) => {
-                        continue
-                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 404,
+                        ..
+                    }) => continue,
                     Err(exc) => return Err(exc).context("Cannot inspect the container"),
                 };
-                check_owner(container.config.as_ref().and_then(|c| c.labels.as_ref()), lease_id, node_id)?;
+                check_owner(
+                    container.config.as_ref().and_then(|c| c.labels.as_ref()),
+                    lease_id,
+                    node_id,
+                )?;
                 if let Some(id) = container.id {
                     result.push(id);
                 }
@@ -160,8 +169,11 @@ impl DockerEngine {
     ) -> Result<()> {
         let engine = self.connect()?;
         let image = template.image.clone();
-        let command =
-            if template.command.is_empty() { None } else { Some(template.command.clone()) };
+        let command = if template.command.is_empty() {
+            None
+        } else {
+            Some(template.command.clone())
+        };
         let mut environment: Vec<String> = template
             .environment
             .iter()
@@ -172,8 +184,11 @@ impl DockerEngine {
             (LEASE_LABEL.to_string(), lease_id.to_string()),
             (NODE_LABEL.to_string(), node_id.to_string()),
         ]);
-        let network_name =
-            if network_name.is_empty() { None } else { Some(network_name.to_string()) };
+        let network_name = if network_name.is_empty() {
+            None
+        } else {
+            Some(network_name.to_string())
+        };
         let (devices, device_requests, group_add) = self.gpu_attachment(gpus)?;
         let exposed: Vec<String> = template.ports.clone();
         let port_bindings: HashMap<String, Option<Vec<bollard::models::PortBinding>>> = template
@@ -225,7 +240,10 @@ impl DockerEngine {
                 labels: Some(labels.clone()),
                 ..Default::default()
             };
-            engine.create_volume(volume).await.context("Cannot create the workspace volume")?;
+            engine
+                .create_volume(volume)
+                .await
+                .context("Cannot create the workspace volume")?;
             let host_config = HostConfig {
                 binds: Some(vec![format!("{volume_name}:/workspace:rw")]),
                 network_mode: network_name,
@@ -248,7 +266,11 @@ impl DockerEngine {
                 env: Some(environment),
                 labels: Some(labels),
                 working_dir: Some("/workspace".to_string()),
-                exposed_ports: if exposed.is_empty() { None } else { Some(exposed) },
+                exposed_ports: if exposed.is_empty() {
+                    None
+                } else {
+                    Some(exposed)
+                },
 
                 host_config: Some(host_config),
                 ..Default::default()
@@ -312,7 +334,11 @@ impl DockerEngine {
             .into_iter()
             .collect();
         groups.sort();
-        let group_add = if groups.is_empty() { None } else { Some(groups) };
+        let group_add = if groups.is_empty() {
+            None
+        } else {
+            Some(groups)
+        };
         Ok((Some(devices), None, group_add))
     }
 
@@ -350,15 +376,15 @@ impl DockerEngine {
                 .context("Cannot run the diagnostic command")?;
             let mut output = Vec::new();
             match results {
-                StartExecResults::Attached { output: mut stream, .. } => {
+                StartExecResults::Attached {
+                    output: mut stream, ..
+                } => {
                     while let Some(chunk) = stream.next().await {
                         use bollard::container::LogOutput;
                         match chunk.context("Cannot read the diagnostic output")? {
                             LogOutput::StdOut { message }
                             | LogOutput::StdErr { message }
-                            | LogOutput::Console { message } => {
-                                output.extend_from_slice(&message)
-                            }
+                            | LogOutput::Console { message } => output.extend_from_slice(&message),
                             _ => {}
                         }
                     }
@@ -369,7 +395,10 @@ impl DockerEngine {
                 .inspect_exec(&exec.id)
                 .await
                 .context("Cannot inspect the diagnostic command")?;
-            Ok((exit.exit_code.unwrap_or(-1), String::from_utf8_lossy(&output).to_string()))
+            Ok((
+                exit.exit_code.unwrap_or(-1),
+                String::from_utf8_lossy(&output).to_string(),
+            ))
         })
     }
 
@@ -406,11 +435,15 @@ impl DockerEngine {
             use futures_util::StreamExt;
             let mut stream = engine.wait_container(
                 container_name,
-                Some(WaitContainerOptions { condition: "not-running".to_string() }),
+                Some(WaitContainerOptions {
+                    condition: "not-running".to_string(),
+                }),
             );
-            let result =
-                tokio::time::timeout(std::time::Duration::from_secs(timeout_seconds), stream.next())
-                    .await;
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(timeout_seconds),
+                stream.next(),
+            )
+            .await;
             match result {
                 Ok(Some(Ok(ContainerWaitResponse { status_code, error }))) => {
                     if let Some(error) = error {
@@ -441,9 +474,9 @@ impl DockerEngine {
                 .await
             {
                 Ok(container) => Some(container),
-                Err(bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }) => {
-                    None
-                }
+                Err(bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404, ..
+                }) => None,
                 Err(exc) => return Err(exc).context("Cannot inspect the container"),
             };
             if let Some(container) = container {
@@ -452,7 +485,11 @@ impl DockerEngine {
                     lease_id,
                     node_id,
                 )?;
-                let options = RemoveContainerOptions { force: true, v: true, ..Default::default() };
+                let options = RemoveContainerOptions {
+                    force: true,
+                    v: true,
+                    ..Default::default()
+                };
                 engine
                     .remove_container(container_name, Some(options))
                     .await
@@ -511,4 +548,3 @@ fn check_owner(
     }
     Ok(())
 }
-
